@@ -1,0 +1,30 @@
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Vercel
+.vercel
+
+# Claude Code local settings
+.claude/
+
+# Supabase temp & large import files
+supabase/.temp/
+supabase/*.xlsx
+supabase/*.pdf
+supabase/*.csv
