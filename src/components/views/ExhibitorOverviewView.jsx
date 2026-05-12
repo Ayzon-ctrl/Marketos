@@ -174,14 +174,6 @@ export default function ExhibitorOverviewView({
                   <p className="muted">{participantSummary.offen} Teilnahme(n) brauchen noch Klärung.</p>
                 </button>
               )}
-              <div className="item">
-                <strong>Weitere Bereiche</strong>
-                <p className="muted">
-                  {announcementCount > 0
-                    ? `${announcementCount} Hinweis${announcementCount === 1 ? '' : 'e'} und weitere Zusatzmodule findest du gesammelt im Bereich Mehr.`
-                    : 'Mitteilungen und weitere Zusatzmodule findest du gesammelt im Bereich Mehr.'}
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -216,17 +208,6 @@ export default function ExhibitorOverviewView({
             </div>
           </div>
 
-          <div className="timeline-section timeline-section-messages">
-            <strong>Weitere Bereiche</strong>
-            <div className="list compact">
-              <div className="item">
-                <strong>Mehr-Menü nutzen</strong>
-                <p className="muted">
-                  Mitteilungen, Bewertungen, Abrechnung, E-Mail-Vorlagen und weitere Zusatzmodule sind dort gesammelt gebündelt.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -310,7 +291,7 @@ export default function ExhibitorOverviewView({
         </div>
       </div>
 
-      <div className="grid two">
+      <div>
         <div
           className="card participant-overview-card module-participants-panel"
           data-testid="exhibitor-participant-status"
@@ -351,21 +332,6 @@ export default function ExhibitorOverviewView({
           </div>
         </div>
 
-        <div
-          className="card overview-secondary-card overview-secondary-utility-card"
-          data-testid="exhibitor-messages"
-        >
-          <h2 className="section-title">Weitere Bereiche</h2>
-          <p className="muted">Sekundäre Module bleiben erreichbar, ohne deinen Arbeitsfokus zu überlagern.</p>
-          <div className="list">
-            <div className="item">
-              <strong>Mehr-Menü nutzen</strong>
-              <p className="muted">
-                Mitteilungen, Bewertungen, E-Mail-Vorlagen, Verträge und weitere Zusatzmodule sind dort gesammelt gebündelt.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )

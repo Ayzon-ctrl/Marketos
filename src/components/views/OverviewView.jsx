@@ -119,7 +119,6 @@ export default function OverviewView({
     [events]
   )
   const focusEvent = useMemo(() => events[0] || null, [events])
-  const messageCount = announcements.length
   const hasCriticalItems = useMemo(
     () =>
       participantSummary.angefragt > 0 ||
@@ -391,19 +390,6 @@ export default function OverviewView({
             </div>
           </div>
 
-          <div className="timeline-section timeline-section-messages">
-            <strong>Weitere Bereiche</strong>
-            <div className="list compact">
-              <div className="item">
-                <strong>Mehr-Menü nutzen</strong>
-                <p className="muted">
-                  {messageCount > 0
-                    ? `${messageCount} Mitteilung${messageCount === 1 ? '' : 'en'} und weitere Zusatzmodule findest du gesammelt im Bereich Mehr.`
-                    : 'Mitteilungen und weitere Zusatzmodule findest du gesammelt im Bereich Mehr.'}
-                </p>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
 
@@ -511,24 +497,7 @@ export default function OverviewView({
         </div>
       </section>
 
-      <div className="grid two overview-secondary-grid">
-        <section
-          className="card overview-secondary-card overview-secondary-utility-card"
-          data-testid="overview-announcements"
-        >
-          <h2 className="section-title">Weitere Bereiche</h2>
-          <p className="muted">Sekundäre Module bleiben erreichbar, ohne den Arbeitsfokus zu überlagern.</p>
-          <div className="list">
-            <div className="item">
-              <strong>Mehr-Menü nutzen</strong>
-              <p className="muted">
-                Mitteilungen, Abrechnung, Händlerprofil, E-Mail-Vorlagen, Bewertungen und Verträge sind dort gesammelt gebündelt.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="card overview-secondary-card" data-testid="overview-automation-panel">
+      <section className="card overview-secondary-card" data-testid="overview-automation-panel">
           <h2 className="section-title">Sekundär</h2>
           <p className="muted">Ruhige Hinweise für später, wenn der operative Kern schon klar ist.</p>
           <div className="list">
@@ -545,8 +514,7 @@ export default function OverviewView({
               </div>
             ))}
           </div>
-        </section>
-      </div>
+      </section>
 
       <ConfirmModal
         open={Boolean(eventToDelete)}
