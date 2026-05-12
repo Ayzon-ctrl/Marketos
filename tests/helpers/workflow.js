@@ -48,6 +48,15 @@ function readEnvFile() {
 
 const env = readEnvFile()
 
+if (!env.PW_E2E_PASSWORD) {
+  throw new Error(
+    'PW_E2E_PASSWORD fehlt in .env.local.\n' +
+    'Bitte ergänzen: PW_E2E_PASSWORD=<dein-testpasswort>'
+  )
+}
+
+const TEST_PASSWORD = env.PW_E2E_PASSWORD
+
 function createTestClient() {
   return createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
     auth: {
@@ -121,7 +130,7 @@ export function getCredentials(projectName, role = 'organizer') {
     const safeProject = projectName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
     credentialsByProject.set(key, {
       email: `marketos-pw-${safeProject}-${role}-${runId}@example.com`,
-      password: 'MarketOS-Test-2026!',
+      password: TEST_PASSWORD,
       displayName: `${TEST_PREFIX}${safeProject}`,
       role
     })
