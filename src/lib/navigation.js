@@ -1,4 +1,5 @@
 import {
+  BarChart2,
   Bell,
   Bot,
   CalendarDays,
@@ -12,6 +13,16 @@ import {
   Store,
   Users
 } from 'lucide-react'
+
+// Analytics-Nav-Item: nur im Organizer-Kontext sichtbar.
+// Nicht in appNav / appMoreNav enthalten, damit es nicht automatisch
+// fuer alle Non-Visitor-Profile erscheint.
+export const analyticsNavItem = {
+  key: 'analytics',
+  icon: BarChart2,
+  label: 'Analytics',
+  path: '/app/analytics',
+}
 
 export const publicNav = [
   { key: 'home', label: 'Start', path: '/' },
@@ -60,6 +71,7 @@ export function getMoreNavItemsForProfile(profile) {
 
 export function getAppPathForView(view, eventId = '') {
   if (view === 'event-detail' && eventId) return `/app/events/${eventId}`
+  if (view === 'analytics') return analyticsNavItem.path
   const match = [...appNav, ...visitorAppNav].find(item => item.key === view)
   return match?.path || '/app'
 }
@@ -67,6 +79,7 @@ export function getAppPathForView(view, eventId = '') {
 export function getAppViewFromPathname(pathname) {
   if (/^\/app\/events\/[^/]+/i.test(pathname)) return 'event-detail'
   if (pathname === '/app' || pathname === '/app/') return 'overview'
+  if (pathname === '/app/analytics' || pathname === '/app/analytics/') return 'analytics'
   const match = [...appNav, ...visitorAppNav].find(item => item.path !== '/app' && pathname.startsWith(item.path))
   return match?.key || 'overview'
 }

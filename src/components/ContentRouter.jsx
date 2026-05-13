@@ -1,3 +1,4 @@
+import AnalyticsView from './views/AnalyticsView'
 import AnnouncementsView from './views/AnnouncementsView'
 import BillingView from './views/BillingView'
 import ChatAssistantView from './views/ChatAssistantView'
@@ -19,6 +20,7 @@ export default function ContentRouter(props) {
     return <VisitorOverviewView {...props} />
   }
 
+  if (props.active === 'analytics') return <AnalyticsView {...props} />
   if (props.active === 'event-detail') return <EventDetailView {...props} />
   if (props.active === 'notifications') return <NotificationsView {...props} />
   if (props.active === 'events') return <EventsView {...props} />

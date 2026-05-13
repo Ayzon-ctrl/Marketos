@@ -6,6 +6,7 @@ import MobileBottomNav from './MobileBottomNav'
 import ContentRouter from './ContentRouter'
 import StyleGuideModal from './StyleGuideModal'
 import {
+  analyticsNavItem,
   getAppPathForView,
   getAppViewFromPathname,
   getMoreNavItemsForProfile,
@@ -96,7 +97,7 @@ export default function ProtectedAppShell({ session }) {
   const navItems = useMemo(() => getNavItemsForProfile(profile), [profile])
   const moreNavItems = useMemo(() => getMoreNavItemsForProfile(profile), [profile])
   const isMoreViewActive = useMemo(
-    () => moreNavItems.some(item => item.key === active) || styleGuideOpen,
+    () => moreNavItems.some(item => item.key === active) || active === 'analytics' || styleGuideOpen,
     [active, moreNavItems, styleGuideOpen]
   )
 
@@ -498,6 +499,16 @@ export default function ProtectedAppShell({ session }) {
                         </button>
                       )
                     })}
+                    {roleView === 'organizer' && (
+                      <button
+                        className={active === 'analytics' ? 'active' : ''}
+                        data-testid="sidebar-more-analytics"
+                        onClick={() => openMoreView('analytics')}
+                        type="button"
+                      >
+                        <analyticsNavItem.icon size={16} /> {analyticsNavItem.label}
+                      </button>
+                    )}
                     <button
                       className={styleGuideOpen ? 'active' : ''}
                       data-testid="sidebar-open-style-guide"
@@ -672,6 +683,16 @@ export default function ProtectedAppShell({ session }) {
                     {item.label}
                   </button>
                 ))}
+                {roleView === 'organizer' && (
+                  <button
+                    className={active === 'analytics' ? 'active' : ''}
+                    data-testid="mobile-more-analytics"
+                    onClick={() => openMoreView('analytics')}
+                    type="button"
+                  >
+                    {analyticsNavItem.label}
+                  </button>
+                )}
                 <button
                   className={styleGuideOpen ? 'active' : ''}
                   data-testid="mobile-open-style-guide"

@@ -159,7 +159,7 @@ export function buildTestVendorName(label) {
 export function attachConsoleTracking(page) {
   const errors = []
   const ignorePattern =
-    /\/rest\/v1\/profiles\?select=\*|\/rest\/v1\/vendor_profiles|\/rest\/v1\/visitor_favorite_events|\/rest\/v1\/visitor_favorite_vendors|\/rest\/v1\/notifications|\/rest\/v1\/public_updates|\/rest\/v1\/subscriptions|\/rest\/v1\/billing_events|\/rest\/v1\/rpc\/get_public_event_vendors|\/rest\/v1\/rpc\/get_public_vendor_events|\/rest\/v1\/rpc\/get_public_event_stand_options|\/rest\/v1\/rpc\/get_public_event_stand_price_tiers|\/rest\/v1\/rpc\/get_public_event_addon_options|\/rest\/v1\/rpc\/track_event|opening_time|closing_time|public_visible/i
+    /\/rest\/v1\/profiles\?select=\*|\/rest\/v1\/vendor_profiles|\/rest\/v1\/visitor_favorite_events|\/rest\/v1\/visitor_favorite_vendors|\/rest\/v1\/notifications|\/rest\/v1\/public_updates|\/rest\/v1\/subscriptions|\/rest\/v1\/billing_events|\/rest\/v1\/rpc\/get_public_event_vendors|\/rest\/v1\/rpc\/get_public_vendor_events|\/rest\/v1\/rpc\/get_public_event_stand_options|\/rest\/v1\/rpc\/get_public_event_stand_price_tiers|\/rest\/v1\/rpc\/get_public_event_addon_options|\/rest\/v1\/rpc\/track_event|\/rest\/v1\/rpc\/get_analytics_summary|opening_time|closing_time|public_visible/i
 
   page.on('console', msg => {
     if (msg.type() !== 'error') return
