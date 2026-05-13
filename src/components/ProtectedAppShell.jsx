@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Bookmark, CalendarDays, CheckCircle2, Euro, LogOut, Palette, Store, Users } from 'lucide-react'
+import { Bell, Bookmark, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Euro, LogOut, Palette, Store, Users } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 import MobileBottomNav from './MobileBottomNav'
 import ContentRouter from './ContentRouter'
@@ -476,15 +476,19 @@ export default function ProtectedAppShell({ session }) {
             {moreNavItems.length > 0 && (
               <div className="sidebar-more-nav">
                 <button
-                  className={`${desktopMoreOpen || isMoreViewActive ? 'active' : ''}`}
-                  data-testid="sidebar-toggle-more"
+                  aria-controls="sidebar-more-panel"
+                  aria-expanded={desktopMoreOpen}
+                  className={`sidebar-more-toggle${desktopMoreOpen ? ' active' : ''}`}
+                  data-testid="sidebar-more-toggle"
                   onClick={() => setDesktopMoreOpen(current => !current)}
                   type="button"
                 >
-                  <Bell size={16} /> Mehr
+                  <Bell size={16} />
+                  <span>Mehr Module</span>
+                  {desktopMoreOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
-                {(desktopMoreOpen || isMoreViewActive) && (
-                  <div className="nav sidebar-subnav">
+                {desktopMoreOpen && (
+                  <div className="nav sidebar-subnav" data-testid="sidebar-more-panel" id="sidebar-more-panel">
                     {moreNavItems.map(item => {
                       const Icon = item.icon
                       return (

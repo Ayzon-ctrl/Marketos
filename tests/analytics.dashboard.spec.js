@@ -137,7 +137,7 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
 
     // Mehr-Bereich in der Sidebar aufklappen
-    const toggleMore = page.getByTestId('sidebar-toggle-more')
+    const toggleMore = page.getByTestId('sidebar-more-toggle')
     if (await toggleMore.isVisible()) {
       await toggleMore.click()
     }
@@ -392,7 +392,7 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     }
 
     // Mehr-Bereich oeffnen
-    const toggleMore = page.getByTestId('sidebar-toggle-more')
+    const toggleMore = page.getByTestId('sidebar-more-toggle')
     if (await toggleMore.isVisible()) {
       await toggleMore.click()
     }
@@ -493,5 +493,168 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
 
     // analytics-view muss sichtbar sein (organizer + kein Crash)
     await expect(page.getByTestId('analytics-view')).toBeVisible()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Desktop Mehr-Menü Dropdown (UX1.3)
+//
+// Testet das neue Dropdown-Verhalten des Desktop-Mehr-Menüs:
+// - Open/Close-Toggling per Klick
+// - aria-expanded korrekt gesetzt
+// - Admin sieht Analytics, Nicht-Admin nicht
+// - Direktnavigation zu /app/analytics öffnet Menü automatisch
+// - Manuelles Schliessen funktioniert auch wenn More-View aktiv ist
+// ---------------------------------------------------------------------------
+
+/**
+ * Wartet bis ProtectedAppShell vollständig geladen ist und Sidebar gerendert wurde.
+ */
+async function waitForShell(page) {
+  await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('sidebar')).toBeVisible()
+}
+
+test.describe.serial('MarketOS Desktop Mehr-Menü Dropdown', () => {
+  // -------------------------------------------------------------------------
+  // TEST 15: Mehr-Menü ist auf /app initial geschlossen
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: Mehr-Menü ist auf /app initial geschlossen (aria-expanded=false)', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app')
+    await waitForShell(page)
+
+    const toggle = page.getByTestId('sidebar-more-toggle')
+    await expect(toggle).toBeVisible()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // Subnav-Inhalte muessen unsichtbar sein
+    await expect(page.getByTestId('sidebar-more-analytics')).not.toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 16: Klick öffnet Menü, aria-expanded wird true
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: Klick auf Toggle öffnet Menü und setzt aria-expanded=true', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app')
+    await waitForShell(page)
+
+    const toggle = page.getByTestId('sidebar-more-toggle')
+    await toggle.click()
+
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    // Subnav muss sichtbar sein
+    await expect(page.getByTestId('sidebar-more-panel')).toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 17: Zweiter Klick schließt Menü, aria-expanded wird false
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: Zweiter Klick schließt Menü wieder (aria-expanded=false)', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app')
+    await waitForShell(page)
+
+    const toggle = page.getByTestId('sidebar-more-toggle')
+    // Öffnen
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    // Schließen
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('sidebar-more-analytics')).not.toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 18: Admin sieht Analytics-Eintrag nach Öffnen
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: Admin sieht sidebar-more-analytics nach Öffnen des Menüs', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app')
+    await waitForShell(page)
+
+    await page.getByTestId('sidebar-more-toggle').click()
+    await expect(page.getByTestId('sidebar-more-analytics')).toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 19: Nicht-Admin sieht Analytics-Eintrag nicht
+  // -------------------------------------------------------------------------
+
+  // Frischer Test-Account 'more-menu-nonadmin' hat is_admin=false (Standard, kein Grant).
+  // Kein beforeAll-Grant für diesen Account.
+
+  test('DROPDOWN: Nicht-Admin sieht sidebar-more-analytics nicht', async ({ page }) => {
+    await ensureAuthenticated(page, 'more-menu-nonadmin', { skipStyleGuide: true })
+    await page.goto('/app')
+    await waitForShell(page)
+
+    const toggle = page.getByTestId('sidebar-more-toggle')
+    if (await toggle.isVisible()) {
+      await toggle.click()
+      await page.waitForTimeout(300) // kurz warten bis Subnav gerendert
+    }
+
+    await expect(page.getByTestId('sidebar-more-analytics')).not.toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 20: /app/analytics direkt → Menü automatisch offen
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: /app/analytics direkt aufgerufen → Menü initial offen (aria-expanded=true)', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app/analytics')
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+    // Warten bis Terminal-State der Analytics-View
+    await page.waitForFunction(
+      () => {
+        const view     = document.querySelector('[data-testid="analytics-view"]')
+        const noAccess = document.querySelector('[data-testid="analytics-no-access"]')
+        const loading  = document.querySelector('[data-testid="analytics-loading"]')
+        return !!(view || noAccess) && !loading
+      },
+      { timeout: 20000 }
+    )
+
+    // Menü muss wegen isMoreViewActive automatisch offen sein
+    await expect(page.getByTestId('sidebar-more-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByTestId('sidebar-more-analytics')).toBeVisible()
+    // Analytics-Button muss als aktiv markiert sein
+    await expect(page.getByTestId('sidebar-more-analytics')).toHaveClass(/active/)
+  })
+
+  // -------------------------------------------------------------------------
+  // TEST 21: Menü schließbar auch wenn /app/analytics aktiv ist
+  // -------------------------------------------------------------------------
+
+  test('DROPDOWN: Toggle schließt Menü auch wenn analytics-View aktiv ist', async ({ page }) => {
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app/analytics')
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+    await page.waitForFunction(
+      () => {
+        const view     = document.querySelector('[data-testid="analytics-view"]')
+        const noAccess = document.querySelector('[data-testid="analytics-no-access"]')
+        const loading  = document.querySelector('[data-testid="analytics-loading"]')
+        return !!(view || noAccess) && !loading
+      },
+      { timeout: 20000 }
+    )
+
+    // Menü ist initial offen
+    const toggle = page.getByTestId('sidebar-more-toggle')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+    // Klick schließt – auch wenn isMoreViewActive noch true ist.
+    // Das war der ursprüngliche Bug: desktopMoreOpen wurde durch isMoreViewActive
+    // dauerhaft offen gehalten. Nach dem Fix steuert nur desktopMoreOpen die Sichtbarkeit.
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('sidebar-more-analytics')).not.toBeVisible()
   })
 })

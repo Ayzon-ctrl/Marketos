@@ -52,7 +52,7 @@ test.describe.serial('MarketOS Auth', () => {
       await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
       await expect(page.getByTestId('app-authenticated')).toHaveAttribute('data-sidebar-theme', 'forest')
       await expect(page.getByTestId('app-authenticated')).toHaveAttribute('data-background-theme', 'rose')
-      await page.getByTestId('sidebar-toggle-more').click()
+      await page.getByTestId('sidebar-more-toggle').click()
       await page.getByTestId('sidebar-open-style-guide').click()
       await expect(page.getByTestId('style-guide-modal')).toBeVisible()
       await page.getByTestId('style-guide-close').click()
