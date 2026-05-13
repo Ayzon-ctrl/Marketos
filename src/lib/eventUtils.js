@@ -103,11 +103,16 @@ export function getProfileName(profile, email) {
   return candidates.find(value => !value.includes('@')) || ''
 }
 
-export function getGreeting(date = new Date()) {
-  const hour = date.getHours()
-  if (hour < 11) return 'Guten Morgen'
-  if (hour < 18) return 'Guten Tag'
+export function getGreetingForHour(hour) {
+  const normalizedHour = Number.isFinite(hour) ? hour : new Date().getHours()
+
+  if (normalizedHour >= 5 && normalizedHour < 11) return 'Guten Morgen'
+  if (normalizedHour >= 11 && normalizedHour < 18) return 'Guten Tag'
   return 'Guten Abend'
+}
+
+export function getGreeting(date = new Date()) {
+  return getGreetingForHour(date.getHours())
 }
 
 export function validateEventForm(form) {

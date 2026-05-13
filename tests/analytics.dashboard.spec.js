@@ -468,6 +468,21 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile erwartet').toBeFalsy()
   })
 
+  test('MOBILE: Admin sieht im Mehr-Menue die Admin-Gruppe mit Analytics', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
+    await page.goto('/app')
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+
+    await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
+    await page.getByTestId('mobile-nav-more').click()
+
+    await expect(page.getByTestId('mobile-more-menu')).toBeVisible()
+    await expect(page.getByTestId('mobile-more-group-admin')).toContainText('Admin')
+    await expect(page.getByTestId('mobile-more-analytics')).toBeVisible()
+  })
+
   // -------------------------------------------------------------------------
   // TEST 14: Analytics-View rendert ohne pageerror auch bei leerem State
   // -------------------------------------------------------------------------

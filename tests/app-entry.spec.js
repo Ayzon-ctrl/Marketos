@@ -14,6 +14,7 @@
  */
 
 import { test, expect } from '@playwright/test'
+import { getGreetingForHour } from '../src/lib/eventUtils'
 import {
   attachConsoleTracking,
   ensureAuthenticated,
@@ -107,5 +108,14 @@ test.describe.serial('MarketOS App Entry', () => {
     ).toHaveLength(0)
 
     await expectNoConsoleErrors(errors)
+  })
+
+  test('APP-ENTRY: Begruessungslogik nutzt die gewuenschten Uhrzeitgrenzen', async () => {
+    expect(getGreetingForHour(5)).toBe('Guten Morgen')
+    expect(getGreetingForHour(10)).toBe('Guten Morgen')
+    expect(getGreetingForHour(11)).toBe('Guten Tag')
+    expect(getGreetingForHour(17)).toBe('Guten Tag')
+    expect(getGreetingForHour(18)).toBe('Guten Abend')
+    expect(getGreetingForHour(4)).toBe('Guten Abend')
   })
 })

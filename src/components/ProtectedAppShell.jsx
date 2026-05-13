@@ -45,6 +45,116 @@ function getSelectedEventIdFromPathname(pathname) {
   return match?.[1] || ''
 }
 
+function buildMobileMoreGroups({
+  active,
+  moreNavItems,
+  openMoreView,
+  openStyleGuide,
+  profile,
+  roleView,
+  signOut,
+  styleGuideOpen,
+  switchRoleView
+}) {
+  const byKey = new Map((moreNavItems || []).map(item => [item.key, item]))
+  const buildButtonItem = (item, testId) => ({
+    key: item.key,
+    label: item.label,
+    active: active === item.key,
+    onClick: () => openMoreView(item.key),
+    testId
+  })
+
+  const communicationItems = []
+  communicationItems.push({
+    key: 'notifications',
+    label: 'Updates',
+    active: active === 'notifications',
+    onClick: () => openMoreView('notifications'),
+    testId: 'mobile-more-notifications'
+  })
+  if (byKey.has('messages')) {
+    communicationItems.push(buildButtonItem(byKey.get('messages'), 'mobile-more-messages'))
+  }
+
+  const organizationItems = ['billing', 'templates', 'reviews', 'contracts']
+    .filter(key => byKey.has(key))
+    .map(key => buildButtonItem(byKey.get(key), `mobile-more-${key}`))
+
+  const profileToolItems = []
+  if (byKey.has('vendor-profile')) {
+    profileToolItems.push(buildButtonItem(byKey.get('vendor-profile'), 'mobile-more-vendor-profile'))
+  }
+  profileToolItems.push({
+    key: 'style-guide',
+    label: 'Style Guide',
+    active: styleGuideOpen,
+    onClick: openStyleGuide,
+    testId: 'mobile-open-style-guide'
+  })
+
+  const accountItems = []
+  if (profile?.role !== 'visitor') {
+    accountItems.push({
+      key: 'role-organizer',
+      label: 'Veranstalter',
+      active: roleView === 'organizer',
+      onClick: () => switchRoleView('organizer'),
+      testId: 'mobile-role-view-organizer'
+    })
+    accountItems.push({
+      key: 'role-exhibitor',
+      label: 'Aussteller',
+      active: roleView === 'exhibitor',
+      onClick: () => switchRoleView('exhibitor'),
+      testId: 'mobile-role-view-exhibitor'
+    })
+  }
+  accountItems.push({
+    key: 'logout',
+    label: 'Abmelden',
+    active: false,
+    onClick: signOut,
+    testId: 'mobile-logout-button'
+  })
+
+  return [
+    {
+      key: 'communication',
+      title: 'Kommunikation',
+      items: communicationItems
+    },
+    {
+      key: 'organization',
+      title: 'Organisation',
+      items: organizationItems
+    },
+    {
+      key: 'profile-tools',
+      title: 'Profil & Tools',
+      items: profileToolItems
+    },
+    ...(profile?.is_admin === true
+      ? [{
+          key: 'admin',
+          title: 'Admin',
+          items: [{
+            key: analyticsNavItem.key,
+            label: analyticsNavItem.label,
+            active: active === analyticsNavItem.key,
+            onClick: () => openMoreView(analyticsNavItem.key),
+            testId: 'mobile-more-analytics'
+          }]
+        }]
+      : []),
+    {
+      key: 'account-view',
+      title: 'Konto & Ansicht',
+      items: accountItems
+    }
+  ].filter(group => group.items.length > 0)
+}
+
 export default function ProtectedAppShell({ session }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -349,7 +459,7 @@ export default function ProtectedAppShell({ session }) {
 
   const eventIssues = useMemo(() => validateEvents(events, locations), [events, locations])
   const roleLabel = isVisitorProfile ? 'Besucherbereich' : roleView === 'organizer' ? 'Veranstalter Dashboard' : 'Aussteller Dashboard'
-  const topbarTitle = loading ? getGreeting() : `${getGreeting()} ${profileName}`.trim()
+  const topbarTitle = loading ? getGreeting() : profileName ? `${getGreeting()} ${profileName}` : 'Willkommen zurück'
   const topbarSubtitle = loading ? 'Profil wird geladen ...' : roleLabel
   const themeStyle = useMemo(() => buildThemeStyle(themePrefs), [themePrefs])
   const selectedEvent = useMemo(
@@ -437,6 +547,22 @@ export default function ProtectedAppShell({ session }) {
       return next
     })
   }, [])
+
+  const mobileMoreGroups = useMemo(
+    () =>
+      buildMobileMoreGroups({
+        active,
+        moreNavItems,
+        openMoreView,
+        openStyleGuide,
+        profile,
+        roleView,
+        signOut: () => supabase.auth.signOut(),
+        styleGuideOpen,
+        switchRoleView
+      }),
+    [active, moreNavItems, openMoreView, openStyleGuide, profile, roleView, styleGuideOpen, switchRoleView]
+  )
 
   return (
     <div
@@ -667,55 +793,29 @@ export default function ProtectedAppShell({ session }) {
 
           {mobileMoreOpen && (
             <div className="mobile-only card more-menu mobile-more-panel" data-testid="mobile-more-menu">
-              <div className="tabs">
-                <button
-                  className={active === 'notifications' ? 'active' : ''}
-                  data-testid="mobile-more-notifications"
-                  onClick={() => openMoreView('notifications')}
-                  type="button"
-                >
-                  Updates
-                </button>
-                {moreNavItems.map(item => (
-                  <button
-                    key={item.key}
-                    className={active === item.key ? 'active' : ''}
-                    data-testid={`mobile-more-${item.key}`}
-                    onClick={() => openMoreView(item.key)}
-                    type="button"
+              <div className="mobile-more-groups">
+                {mobileMoreGroups.map(group => (
+                  <section
+                    className="mobile-more-group"
+                    data-testid={`mobile-more-group-${group.key}`}
+                    key={group.key}
                   >
-                    {item.label}
-                  </button>
+                    <p className="small muted mobile-more-group-title">{group.title}</p>
+                    <div className="mobile-more-group-list">
+                      {group.items.map(item => (
+                        <button
+                          key={item.key}
+                          className={`mobile-more-button${item.active ? ' active' : ''}`}
+                          data-testid={item.testId}
+                          onClick={item.onClick}
+                          type="button"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 ))}
-                {profile?.is_admin === true && (
-                  <button
-                    className={active === 'analytics' ? 'active' : ''}
-                    data-testid="mobile-more-analytics"
-                    onClick={() => openMoreView('analytics')}
-                    type="button"
-                  >
-                    {analyticsNavItem.label}
-                  </button>
-                )}
-                <button
-                  className={styleGuideOpen ? 'active' : ''}
-                  data-testid="mobile-open-style-guide"
-                  onClick={openStyleGuide}
-                  type="button"
-                >
-                  Style Guide
-                </button>
-              </div>
-              <div className="shell-utility-group mobile-shell-utility-group">
-                <p className="small muted">Konto & Tools</p>
-                <button
-                  className="btn ghost sidebar-utility-button shell-utility-button shell-logout-button"
-                  data-testid="mobile-logout-button"
-                  onClick={() => supabase.auth.signOut()}
-                  type="button"
-                >
-                  <LogOut size={16} /> Abmelden
-                </button>
               </div>
             </div>
           )}
