@@ -499,7 +499,7 @@ export default function ProtectedAppShell({ session }) {
                         </button>
                       )
                     })}
-                    {roleView === 'organizer' && (
+                    {profile?.is_admin === true && (
                       <button
                         className={active === 'analytics' ? 'active' : ''}
                         data-testid="sidebar-more-analytics"
@@ -683,7 +683,7 @@ export default function ProtectedAppShell({ session }) {
                     {item.label}
                   </button>
                 ))}
-                {roleView === 'organizer' && (
+                {profile?.is_admin === true && (
                   <button
                     className={active === 'analytics' ? 'active' : ''}
                     data-testid="mobile-more-analytics"

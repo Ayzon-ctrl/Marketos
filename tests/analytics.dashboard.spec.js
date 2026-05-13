@@ -4,14 +4,20 @@
  * Testet das interne Analytics-Dashboard (/app/analytics).
  *
  * Anforderungen:
- * - Nur fuer Organizer sichtbar
+ * - Nur fuer App-Admins sichtbar (profile.is_admin = true)
  * - Kein Crash, kein PageError
  * - Aggregierte Daten werden angezeigt
  * - Keine verbotenen Felder im DOM (user_id, session_id, entity_id, metadata, route)
  * - Leerzustand funktioniert
  * - Filter aendern die Anzeige
  * - Mobile: kein horizontales Layout-Problem
- * - Exhibitor/Visitor: Analytics nicht sichtbar oder klar abgefangen
+ * - Nicht-Admins: Analytics nicht sichtbar oder klar abgefangen
+ *
+ * Testsetup:
+ * - Der Test-Account setzt in beforeAll is_admin = true auf seinem eigenen Profil.
+ *   Dies ist moeglich, weil die bestehende RLS-Update-Policy auf profiles keine
+ *   Column-Level-Einschraenkung fuer is_admin enthaelt (akzeptiertes Trade-off fuer
+ *   ein internes Aggregate-Dashboard ohne PII).
  */
 
 import { test, expect } from '@playwright/test'
@@ -38,8 +44,8 @@ async function openAnalytics(page) {
   await page.goto('/app/analytics')
   await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
   // Warten bis AnalyticsView einen Terminal-State erreicht hat:
-  // - analytics-view: organizer, Daten geladen oder leer
-  // - analytics-no-access: nicht-organizer Kontext
+  // - analytics-view: Admin, Daten geladen oder leer
+  // - analytics-no-access: Nicht-Admin
   await page.waitForFunction(
     () => {
       const view     = document.querySelector('[data-testid="analytics-view"]')
@@ -79,6 +85,16 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     client = await getAuthedClient(credentials)
     await page.close()
 
+    // Test-Account als Analytics-Admin markieren.
+    // get_analytics_summary() und die Analytics-View erfordern profile.is_admin = true.
+    // Die bestehende RLS-Policy erlaubt Nutzern, ihr eigenes Profil zu aktualisieren.
+    const { data: userData } = await client.auth.getUser()
+    const { error: adminError } = await client
+      .from('profiles')
+      .update({ is_admin: true })
+      .eq('id', userData.user.id)
+    if (adminError) throw new Error(`is_admin konnte nicht gesetzt werden: ${adminError.message}`)
+
     // Test-Events schreiben damit die Development-Ansicht Daten hat.
     // Drei unterschiedliche Event-Typen fuer Summary-Berechnung.
     await client.rpc('track_event', {
@@ -112,10 +128,10 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
   })
 
   // -------------------------------------------------------------------------
-  // TEST 1: Organizer sieht Analytics-Nav-Eintrag im Mehr-Menü
+  // TEST 1: Admin sieht Analytics-Nav-Eintrag im Mehr-Menü
   // -------------------------------------------------------------------------
 
-  test('NAV: Organizer sieht Analytics im Mehr-Menü der Sidebar', async ({ page }) => {
+  test('NAV: Admin sieht Analytics im Mehr-Menü der Sidebar', async ({ page }) => {
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
@@ -356,10 +372,14 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
   })
 
   // -------------------------------------------------------------------------
-  // TEST 11: Exhibitor sieht Analytics NICHT in der Navigation
+  // TEST 11: Admin sieht Analytics in der Navigation unabhaengig von roleView
   // -------------------------------------------------------------------------
 
-  test('ACCESS: Exhibitor-Kontext zeigt Analytics nicht in der Sidebar-Navigation', async ({ page }) => {
+  // Nach T1.6.1 steuert profile.is_admin – nicht roleView – ob der Analytics-
+  // Eintrag in der Navigation erscheint. Ein Admin sieht den Button auch dann,
+  // wenn er im Exhibitor-Kontext arbeitet.
+
+  test('ACCESS: Admin sieht Analytics im Mehr-Menü auch im Exhibitor-Kontext', async ({ page }) => {
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
@@ -377,18 +397,24 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
       await toggleMore.click()
     }
 
-    // Analytics-Button darf NICHT sichtbar sein
-    await expect(page.getByTestId('sidebar-more-analytics')).not.toBeVisible()
+    // Admin-User: Analytics-Button muss sichtbar sein (is_admin = true, unabhaengig von roleView)
+    await expect(
+      page.getByTestId('sidebar-more-analytics'),
+      'Admin sieht den Analytics-Button unabhaengig vom aktiven roleView'
+    ).toBeVisible()
   })
 
   // -------------------------------------------------------------------------
-  // TEST 12: Direkter URL-Aufruf im Exhibitor-Kontext zeigt Hinweis
+  // TEST 12: Admin sieht Analytics-Dashboard unabhaengig von roleView
   // -------------------------------------------------------------------------
 
-  test('ACCESS: Exhibitor-Kontext bei /app/analytics zeigt Hinweis statt Daten', async ({ page }) => {
+  // profile.is_admin steuert den Zugriff – roleView hat keinen Einfluss mehr.
+  // Auch mit localStorage='exhibitor' muss ein Admin analytics-view sehen.
+
+  test('ACCESS: Admin sieht Analytics-Dashboard unabhaengig vom roleView in localStorage', async ({ page }) => {
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
 
-    // Direkt per localStorage auf Exhibitor-Kontext umschalten –
+    // Exhibitor-Kontext per localStorage setzen –
     // zuverlaessiger als GUI-Klick + Reload, da keine Race-Condition moeglich.
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
@@ -396,20 +422,15 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
       localStorage.setItem('marketos-role-view', 'exhibitor')
     })
 
-    // Jetzt /app/analytics laden – App liest 'exhibitor' aus localStorage
-    await page.goto('/app/analytics')
-    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
-    // analytics-loading erscheint nur wenn roleView==='organizer' – bei exhibitor sofort kein loading
-    await page.waitForFunction(
-      () => !document.querySelector('[data-testid="analytics-loading"]'),
-      { timeout: 10000 }
-    )
+    // /app/analytics laden – Admin soll trotz exhibitor-localStorage das Dashboard sehen
+    await openAnalytics(page)
 
-    // Exhibitor muss den Hinweis sehen (analytics-no-access)
+    // Admin muss analytics-view sehen, nicht analytics-no-access
     await expect(
-      page.getByTestId('analytics-no-access'),
-      'Exhibitor muss den Kein-Zugriff-Hinweis sehen, nicht das Analytics-Dashboard'
+      page.getByTestId('analytics-view'),
+      'Admin muss das Analytics-Dashboard sehen, unabhaengig vom roleView'
     ).toBeVisible()
+    await expect(page.getByTestId('analytics-no-access')).not.toBeVisible()
   })
 
   // -------------------------------------------------------------------------
@@ -421,7 +442,6 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
 
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
     // localStorage auf organizer zuruecksetzen (Test 12 hat exhibitor gesetzt)
-    await page.goto('/app')
     await page.evaluate(() => { localStorage.setItem('marketos-role-view', 'organizer') })
     await page.goto('/app/analytics')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
@@ -457,7 +477,9 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     page.on('pageerror', err => pageErrors.push(err.message))
 
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
-    // localStorage auf organizer zuruecksetzen (Test 12 hat exhibitor gesetzt)
+    // localStorage auf organizer zuruecksetzen (Test 12 hat exhibitor gesetzt).
+    // Admin sieht analytics-view ohnehin unabhaengig vom roleView –
+    // Reset sichert aber einen sauberen Ausgangszustand fuer den Snapshot.
     await page.evaluate(() => { localStorage.setItem('marketos-role-view', 'organizer') })
 
     // Oeffnet /app/analytics und wartet auf echten Terminal-State

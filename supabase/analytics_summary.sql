@@ -65,6 +65,13 @@ begin
     return;
   end if;
 
+  -- Admin-Gate: Nur Betreiber-Admins (profiles.is_admin = true) duerfen
+  -- aggregierte Nutzungsstatistiken abrufen. Nicht-Admins erhalten eine
+  -- leere Ergebnismenge (kein Fehler, kein Datenleck).
+  if not public.is_app_admin() then
+    return;
+  end if;
+
   -- Zeitraum-Cap: mindestens 1 Tag, hoechstens 365 Tage.
   -- Negative Werte und NULL werden auf 1 gesetzt; Werte > 365 werden gekappt.
   v_days := greatest(1, least(coalesce(p_days, 30), 365));

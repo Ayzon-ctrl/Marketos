@@ -59,14 +59,14 @@ function BarRow({ label, count, maxCount, dateLabel = false }) {
 // Hauptkomponente
 // ---------------------------------------------------------------------------
 
-export default function AnalyticsView({ roleView }) {
-  // Guard: Analytics nur im Organizer-Kontext
-  if (roleView !== 'organizer') {
+export default function AnalyticsView({ profile }) {
+  // Guard: Analytics nur fuer App-Admins (profile.is_admin = true).
+  // Nicht-Admins sehen einen Hinweis statt der Daten.
+  if (!profile?.is_admin) {
     return (
       <div className="card" data-testid="analytics-no-access">
         <p className="muted">
-          Analytics ist nur im Veranstalter-Kontext verfügbar.
-          Bitte in den Veranstalter-Kontext wechseln.
+          Analytics ist nur für Administratoren verfügbar.
         </p>
       </div>
     )
