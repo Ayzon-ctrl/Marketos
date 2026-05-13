@@ -12,6 +12,7 @@ import {
   getNavItemsForProfile
 } from '../lib/navigation'
 import { getGreeting, getProfileName, validateEvents } from '../lib/eventUtils'
+import { trackEvent } from '../lib/analytics'
 import {
   backgroundThemes,
   buildThemeStyle,
@@ -86,6 +87,8 @@ export default function ProtectedAppShell({ session }) {
   const [participantViewFilter, setParticipantViewFilter] = useState('alle')
   const [participantViewEventId, setParticipantViewEventId] = useState('')
   const toastTimerRef = useRef(null)
+  const hasTrackedAppEntryRef = useRef(false)
+  const lastTrackedDashboardRoleRef = useRef(null)
 
   const active = useMemo(() => getAppViewFromPathname(location.pathname), [location.pathname])
   const selectedEventId = useMemo(() => getSelectedEventIdFromPathname(location.pathname), [location.pathname])
@@ -148,6 +151,20 @@ export default function ProtectedAppShell({ session }) {
       setFavoriteEvents(data.favoriteEvents)
       setFavoriteVendors(data.favoriteVendors)
       setTaskSchemaReady(Boolean(data.taskSchemaReady))
+
+      // app_entry – einmalig pro Session, nachdem Auth + Daten erfolgreich geladen sind.
+      if (!hasTrackedAppEntryRef.current) {
+        hasTrackedAppEntryRef.current = true
+        const entryRole = data.profile?.role === 'visitor'
+          ? 'visitor'
+          : (preferredRoleView || defaultRoleView)
+        trackEvent(supabase, {
+          event_name: 'app_entry',
+          area: 'dashboard',
+          role_context: entryRole,
+          route: location.pathname,
+        })
+      }
     } catch (err) {
       setError(getUserErrorMessage(err, 'Fehler beim Laden.'))
     } finally {
@@ -174,6 +191,20 @@ export default function ProtectedAppShell({ session }) {
     if (active === 'overview' || active === 'notifications') return
     navigate('/app', { replace: true })
   }, [active, isVisitorProfile, navigate])
+
+  // dashboard_loaded – feuert wenn Overview-View aktiv und Daten geladen sind.
+  // Ref verhindert Doppel-Tracking fuer denselben role_context ohne echten Rollenwechsel.
+  const effectiveRoleContext = isVisitorProfile ? 'visitor' : roleView
+  useEffect(() => {
+    if (loading || active !== 'overview') return
+    if (lastTrackedDashboardRoleRef.current === effectiveRoleContext) return
+    lastTrackedDashboardRoleRef.current = effectiveRoleContext
+    trackEvent(supabase, {
+      event_name: 'dashboard_loaded',
+      area: 'dashboard',
+      role_context: effectiveRoleContext,
+    })
+  }, [active, loading, effectiveRoleContext])
 
   const profileName = useMemo(() => {
     if (!profile) return ''
@@ -363,12 +394,17 @@ export default function ProtectedAppShell({ session }) {
 
   const switchRoleView = useCallback(
     nextRoleView => {
+      trackEvent(supabase, {
+        event_name: 'role_switched',
+        area: 'dashboard',
+        metadata: { role_from: roleView, role_to: nextRoleView },
+      })
       saveRoleViewPreference(nextRoleView)
       setRoleView(nextRoleView)
       setMobileMoreOpen(false)
       navigate('/app')
     },
-    [navigate]
+    [navigate, roleView]
   )
 
   const handlePrimaryNavigation = useCallback(

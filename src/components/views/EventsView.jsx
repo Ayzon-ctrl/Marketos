@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from 'react'
+import { trackEvent } from '../../lib/analytics'
 import { Globe, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '../../supabaseClient'
 import { getEventVisibilityLabel, validateEventForm } from '../../lib/eventUtils'
@@ -308,6 +309,11 @@ export default function EventsView({
   }
 
   async function openImportDialog() {
+    trackEvent(supabase, {
+      event_name: 'import_dialog_opened',
+      area: 'events',
+      role_context: 'organizer',
+    })
     setImportOpen(true)
     setImportSourceId('')
     setImportBasics(true)
@@ -588,6 +594,26 @@ export default function EventsView({
         successMsg = `Daten wurden übernommen: ${parts.join(', ')}. Bitte prüfen und speichern.`
       }
       notify?.('success', successMsg)
+
+      // import_completed – fire-and-forget, kein Freitext, nur strukturierte Booleans/Zahlen.
+      trackEvent(supabase, {
+        event_name: 'import_completed',
+        area: 'events',
+        role_context: 'organizer',
+        result: 'success',
+        metadata: {
+          import_basics: importBasics,
+          import_exhibitor_info: importExhibitorInfo,
+          import_stand_pricing: importStandPricing,
+          import_participants: importParticipants,
+          ...(importParticipants && selectedParticipantIds.size > 0 && {
+            selected_participant_count: selectedParticipantIds.size,
+          }),
+          ...(importParticipants && participantResult.skipped > 0 && {
+            skipped_count: participantResult.skipped,
+          }),
+        },
+      })
     } catch (err) {
       notify?.('error', getUserErrorMessage(err, 'Import fehlgeschlagen.'))
     } finally {
@@ -749,6 +775,14 @@ export default function EventsView({
           ? 'Event aktualisiert. Die Datenprüfung wurde neu geladen.'
           : 'Event gespeichert. Es ist noch intern und kann jetzt veröffentlicht werden.'
       )
+
+      // event_saved – fire-and-forget, kein Freitext.
+      trackEvent(supabase, {
+        event_name: 'event_saved',
+        area: 'events',
+        role_context: 'organizer',
+        result: 'success',
+      })
     } catch (err) {
       notify?.('error', getUserErrorMessage(err, 'Event konnte nicht gespeichert werden.'))
     } finally {
@@ -779,6 +813,16 @@ export default function EventsView({
           ? 'Event veröffentlicht. Es ist jetzt auf Landingpage und Märkten sichtbar.'
           : 'Event ist jetzt wieder intern.'
       )
+
+      // event_published – nur beim Veröffentlichen tracken, nicht beim Zurückziehen.
+      if (nextVisible) {
+        trackEvent(supabase, {
+          event_name: 'event_published',
+          area: 'events',
+          role_context: 'organizer',
+          result: 'success',
+        })
+      }
     } catch (err) {
       notify?.('error', getUserErrorMessage(err, 'Sichtbarkeit konnte nicht gespeichert werden.'))
     } finally {
