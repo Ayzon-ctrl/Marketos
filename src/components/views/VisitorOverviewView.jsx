@@ -11,15 +11,15 @@ export default function VisitorOverviewView({
   const unreadNotifications = notifications.filter(item => !item.read_at).slice(0, 4)
 
   return (
-    <div className="grid" data-testid="visitor-overview-view">
+    <div className="grid visitor-overview-grid" data-testid="visitor-overview-view">
       <div className="card visitor-welcome-card">
         <h2>Hallo {profileName}</h2>
         <p className="muted">
           Deine Merkliste sammelt Märkte und Händler, die du später schnell wiederfinden willst.
         </p>
-        <div className="grid stats">
+        <div className="grid stats visitor-stats-grid">
           {stats.map(stat => (
-            <div className="card stat-card compact" key={stat.label}>
+            <div className="card stat-card compact visitor-stat-card" key={stat.label}>
               <strong>{stat.value}</strong>
               <span>{stat.label}</span>
             </div>
@@ -27,14 +27,14 @@ export default function VisitorOverviewView({
         </div>
       </div>
 
-      <div className="grid two">
-        <div className="card" data-testid="visitor-favorite-events">
-          <div className="row space-between">
+      <div className="grid two visitor-favorites-grid">
+        <div className="card visitor-favorite-card" data-testid="visitor-favorite-events">
+          <div className="row space-between visitor-card-header">
             <div>
               <h2>Gespeicherte Märkte</h2>
               <p className="muted">Deine nächsten Marktbesuche auf einen Blick.</p>
             </div>
-            <Link className="btn ghost" to="/markets">
+            <Link className="btn ghost visitor-card-action" to="/markets">
               Mehr Märkte
             </Link>
           </div>
@@ -54,13 +54,13 @@ export default function VisitorOverviewView({
           </div>
         </div>
 
-        <div className="card" data-testid="visitor-favorite-vendors">
-          <div className="row space-between">
+        <div className="card visitor-favorite-card" data-testid="visitor-favorite-vendors">
+          <div className="row space-between visitor-card-header">
             <div>
               <h2>Gespeicherte Händler</h2>
               <p className="muted">Marken und Stände, die du wiederfinden möchtest.</p>
             </div>
-            <Link className="btn ghost" to="/vendors">
+            <Link className="btn ghost visitor-card-action" to="/vendors">
               Mehr Händler
             </Link>
           </div>
@@ -82,12 +82,12 @@ export default function VisitorOverviewView({
       </div>
 
       <div className="card" data-testid="visitor-latest-updates">
-        <div className="row space-between">
+        <div className="row space-between visitor-card-header">
           <div>
             <h2>Neu aus deiner Merkliste</h2>
             <p className="muted">So bleiben Besucher ohne Push oder E-Mail trotzdem nah dran.</p>
           </div>
-          <Link className="btn ghost" to="/app/updates">
+          <Link className="btn ghost visitor-card-action" to="/app/updates">
             Alle Updates
           </Link>
         </div>

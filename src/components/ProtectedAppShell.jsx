@@ -115,6 +115,7 @@ function buildMobileMoreGroups({
     label: 'Abmelden',
     active: false,
     onClick: signOut,
+    tone: 'danger',
     testId: 'mobile-logout-button'
   })
 
@@ -505,6 +506,8 @@ export default function ProtectedAppShell({ session }) {
 
   const switchRoleView = useCallback(
     nextRoleView => {
+      if (nextRoleView !== 'organizer' && nextRoleView !== 'exhibitor') return
+
       trackEvent(supabase, {
         event_name: 'role_switched',
         area: 'dashboard',
@@ -805,7 +808,7 @@ export default function ProtectedAppShell({ session }) {
                       {group.items.map(item => (
                         <button
                           key={item.key}
-                          className={`mobile-more-button${item.active ? ' active' : ''}`}
+                          className={`mobile-more-button${item.active ? ' active' : ''}${item.tone === 'danger' ? ' mobile-more-button-danger' : ''}`}
                           data-testid={item.testId}
                           onClick={item.onClick}
                           type="button"

@@ -14,7 +14,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { getGreetingForHour } from '../src/lib/eventUtils'
+import { fmtDate, getGreetingForHour } from '../src/lib/eventUtils'
 import {
   attachConsoleTracking,
   ensureAuthenticated,
@@ -76,6 +76,9 @@ test.describe.serial('MarketOS App Entry', () => {
 
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
     await expect(page.getByTestId('sidebar')).toBeVisible()
+    await expect(page.getByTestId('role-view-organizer')).toBeVisible()
+    await expect(page.getByTestId('role-view-exhibitor')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Besucher', exact: true })).toHaveCount(0)
 
     expect(
       pageErrors,
@@ -117,5 +120,11 @@ test.describe.serial('MarketOS App Entry', () => {
     expect(getGreetingForHour(17)).toBe('Guten Tag')
     expect(getGreetingForHour(18)).toBe('Guten Abend')
     expect(getGreetingForHour(4)).toBe('Guten Abend')
+  })
+
+  test('APP-ENTRY: Datumsformat ist immer zweistellig', async () => {
+    expect(fmtDate('2026-05-01')).toBe('01.05.2026')
+    expect(fmtDate('2026-03-09')).toBe('09.03.2026')
+    expect(fmtDate('2026-05-13')).toBe('13.05.2026')
   })
 })

@@ -11,7 +11,7 @@ export default function LoginView() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [companyName, setCompanyName] = useState('')
-  const [role, setRole] = useState('visitor')
+  const [role, setRole] = useState('organizer')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -110,7 +110,6 @@ export default function LoginView() {
                 value={role}
                 onChange={event => setRole(event.target.value)}
               >
-                <option value="visitor">Besucher</option>
                 <option value="organizer">Veranstalter</option>
                 <option value="exhibitor">Aussteller</option>
                 <option value="both">Beides</option>

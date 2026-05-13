@@ -83,6 +83,7 @@ test.describe.serial('MarketOS Mobile', () => {
     await expect(page.getByTestId('mobile-role-view-organizer')).toBeVisible()
     await expect(page.getByTestId('mobile-role-view-exhibitor')).toBeVisible()
     await expect(page.getByTestId('mobile-logout-button')).toBeVisible()
+    await expect(menu).not.toContainText('Besucher')
 
     await expect(page.getByTestId('mobile-more-group-admin')).toHaveCount(0)
     await expect(page.getByTestId('mobile-more-analytics')).toHaveCount(0)

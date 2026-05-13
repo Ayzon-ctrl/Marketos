@@ -12,7 +12,11 @@ export const vendorCategorySuggestions = [
 
 export function fmtDate(date) {
   if (!date) return 'Ohne Datum'
-  return new Date(`${date}T12:00:00`).toLocaleDateString('de-DE')
+  return new Date(`${date}T12:00:00`).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
 }
 
 export function fmtTime(time) {

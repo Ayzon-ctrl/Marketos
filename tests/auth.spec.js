@@ -27,6 +27,16 @@ test.describe.serial('MarketOS Auth', () => {
     await page.getByTestId('toggle-password').click()
     await expect(page.getByTestId('login-password')).toHaveAttribute('type', 'password')
 
+    await page.getByRole('button', { name: /Noch kein Konto\? Registrieren/i }).click()
+    await expect(page.getByTestId('register-role')).toBeVisible()
+    await expect(page.getByTestId('register-role')).toHaveValue('organizer')
+    await expect(page.getByTestId('register-role')).not.toContainText('Besucher')
+    await expect(page.getByTestId('register-role')).toContainText('Veranstalter')
+    await expect(page.getByTestId('register-role')).toContainText('Aussteller')
+    await expect(page.getByTestId('register-role')).toContainText('Beides')
+    await page.getByRole('button', { name: /Schon Konto\? Einloggen/i }).click()
+    await expect(page.getByTestId('login-submit')).toBeVisible()
+
     const credentials = await ensureAuthenticated(page, testInfo.project.name, {
       requireExplicitLogin: true,
       skipStyleGuide: true
