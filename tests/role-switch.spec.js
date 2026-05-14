@@ -13,7 +13,7 @@ test.describe('MarketOS Role Switch', () => {
 
     const errors = attachConsoleTracking(page)
 
-    await ensureAuthenticated(page, testInfo.project.name)
+    await ensureAuthenticated(page, 'role-switch-both', { role: 'both', skipStyleGuide: true })
     await expect(page.getByTestId('app-authenticated')).toBeVisible()
     await expect(page.getByTestId('overview-focus-card')).toBeVisible()
 

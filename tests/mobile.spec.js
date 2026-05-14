@@ -58,7 +58,7 @@ test.describe.serial('MarketOS Mobile', () => {
 
     const errors = attachConsoleTracking(page)
 
-    await ensureAuthenticated(page, 'more-menu-nonadmin', { skipStyleGuide: true })
+    await ensureAuthenticated(page, 'mobile-organizer-only', { role: 'organizer', skipStyleGuide: true })
     await page.goto('/app')
 
     await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
@@ -70,7 +70,8 @@ test.describe.serial('MarketOS Mobile', () => {
     await expect(page.getByTestId('mobile-more-group-communication')).toContainText('Kommunikation')
     await expect(page.getByTestId('mobile-more-group-organization')).toContainText('Organisation')
     await expect(page.getByTestId('mobile-more-group-profile-tools')).toContainText('Profil & Tools')
-    await expect(page.getByTestId('mobile-more-group-account-view')).toContainText('Konto & Ansicht')
+    await expect(page.getByTestId('mobile-more-group-account-view')).toContainText('Konto')
+    await expect(page.getByTestId('mobile-more-group-account-view')).not.toContainText('Konto & Ansicht')
 
     await expect(page.getByTestId('mobile-more-notifications')).toBeVisible()
     await expect(page.getByTestId('mobile-more-messages')).toBeVisible()
@@ -80,8 +81,8 @@ test.describe.serial('MarketOS Mobile', () => {
     await expect(page.getByTestId('mobile-more-contracts')).toBeVisible()
     await expect(page.getByTestId('mobile-more-vendor-profile')).toBeVisible()
     await expect(page.getByTestId('mobile-open-style-guide')).toBeVisible()
-    await expect(page.getByTestId('mobile-role-view-organizer')).toBeVisible()
-    await expect(page.getByTestId('mobile-role-view-exhibitor')).toBeVisible()
+    await expect(page.getByTestId('mobile-role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('mobile-role-view-exhibitor')).toHaveCount(0)
     await expect(page.getByTestId('mobile-logout-button')).toBeVisible()
     await expect(menu).not.toContainText('Besucher')
 
@@ -95,6 +96,47 @@ test.describe.serial('MarketOS Mobile', () => {
 
     await expect(page.getByTestId('mobile-nav-events')).toBeVisible()
     await expect(page.getByTestId('mobile-nav-overview')).toBeVisible()
+    await expectNoConsoleErrors(errors)
+  })
+
+  test('MOBILE ROLLENWECHSEL: Rolle both sieht beide Umschalter im Mehr-Menü', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-chromium', 'Dieser Test ist nur fuer Mobile gedacht.')
+    test.setTimeout(60000)
+
+    const errors = attachConsoleTracking(page)
+
+    await ensureAuthenticated(page, 'mobile-both-role', { role: 'both', skipStyleGuide: true })
+    await page.goto('/app')
+
+    await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
+    await page.getByTestId('mobile-nav-more').click()
+
+    const menu = page.getByTestId('mobile-more-menu')
+    await expect(menu).toBeVisible()
+    await expect(page.getByTestId('mobile-more-group-account-view')).toContainText('Konto & Ansicht')
+    await expect(page.getByTestId('mobile-role-view-organizer')).toBeVisible()
+    await expect(page.getByTestId('mobile-role-view-exhibitor')).toBeVisible()
+
+    if (await page.getByTestId('style-guide-modal').count()) {
+      await page.getByTestId('style-guide-save').click()
+      await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
+      await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
+      if ((await menu.count()) === 0) {
+        await page.getByTestId('mobile-nav-more').click()
+      }
+      await expect(menu).toBeVisible()
+      await expect(page.getByTestId('mobile-role-view-organizer')).toBeVisible()
+      await expect(page.getByTestId('mobile-role-view-exhibitor')).toBeVisible()
+    }
+
+    await page.getByTestId('mobile-role-view-exhibitor').click()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Aussteller Dashboard/i)
+
+    await page.getByTestId('mobile-nav-more').click()
+    await expect(page.getByTestId('mobile-role-view-organizer')).toBeVisible()
+    await page.getByTestId('mobile-role-view-organizer').click()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+
     await expectNoConsoleErrors(errors)
   })
 })

@@ -40,6 +40,23 @@ function saveRoleViewPreference(roleView) {
   window.localStorage.setItem('marketos-role-view', roleView)
 }
 
+function getAllowedRoleViews(profile) {
+  if (!profile) return ['organizer']
+  if (profile.role === 'both') return ['organizer', 'exhibitor']
+  if (profile.role === 'exhibitor') return ['exhibitor']
+  if (profile.role === 'visitor') return []
+  return ['organizer']
+}
+
+function resolveRoleViewForProfile(profile, preferredRoleView = '') {
+  const allowedRoleViews = getAllowedRoleViews(profile)
+
+  if (allowedRoleViews.length === 0) return 'organizer'
+  if (allowedRoleViews.includes(preferredRoleView)) return preferredRoleView
+  if (allowedRoleViews.includes('organizer')) return 'organizer'
+  return allowedRoleViews[0]
+}
+
 function getSelectedEventIdFromPathname(pathname) {
   const match = pathname.match(/^\/app\/events\/([^/]+)/i)
   return match?.[1] || ''
@@ -47,6 +64,7 @@ function getSelectedEventIdFromPathname(pathname) {
 
 function buildMobileMoreGroups({
   active,
+  canSwitchRoleView,
   moreNavItems,
   openMoreView,
   openStyleGuide,
@@ -94,7 +112,7 @@ function buildMobileMoreGroups({
   })
 
   const accountItems = []
-  if (profile?.role !== 'visitor') {
+  if (canSwitchRoleView) {
     accountItems.push({
       key: 'role-organizer',
       label: 'Veranstalter',
@@ -150,7 +168,7 @@ function buildMobileMoreGroups({
       : []),
     {
       key: 'account-view',
-      title: 'Konto & Ansicht',
+      title: canSwitchRoleView ? 'Konto & Ansicht' : 'Konto',
       items: accountItems
     }
   ].filter(group => group.items.length > 0)
@@ -206,6 +224,8 @@ export default function ProtectedAppShell({ session }) {
   const active = useMemo(() => getAppViewFromPathname(location.pathname), [location.pathname])
   const selectedEventId = useMemo(() => getSelectedEventIdFromPathname(location.pathname), [location.pathname])
   const isVisitorProfile = profile?.role === 'visitor'
+  const allowedRoleViews = useMemo(() => getAllowedRoleViews(profile), [profile])
+  const canSwitchRoleView = allowedRoleViews.length > 1
   const navItems = useMemo(() => getNavItemsForProfile(profile), [profile])
   const moreNavItems = useMemo(() => getMoreNavItemsForProfile(profile), [profile])
   const isMoreViewActive = useMemo(
@@ -240,10 +260,14 @@ export default function ProtectedAppShell({ session }) {
       const data = await loadDashboardData(authData.user)
       const preferredRoleView = loadRoleViewPreference()
       const defaultRoleView = data.roleView === 'exhibitor' ? 'exhibitor' : 'organizer'
+      const nextRoleView = resolveRoleViewForProfile(data.profile, preferredRoleView || defaultRoleView)
 
       setProfile(data.profile)
       setProfileNameDraft(data.profileNameDraft)
-      setRoleView(data.profile?.role === 'visitor' ? 'organizer' : preferredRoleView || defaultRoleView)
+      setRoleView(nextRoleView)
+      if (data.profile?.role !== 'visitor') {
+        saveRoleViewPreference(nextRoleView)
+      }
       setEvents(data.events)
       setParticipants(data.participants)
       setTasks(data.tasks)
@@ -270,7 +294,7 @@ export default function ProtectedAppShell({ session }) {
         hasTrackedAppEntryRef.current = true
         const entryRole = data.profile?.role === 'visitor'
           ? 'visitor'
-          : (preferredRoleView || defaultRoleView)
+          : nextRoleView
         trackEvent(supabase, {
           event_name: 'app_entry',
           area: 'dashboard',
@@ -304,6 +328,21 @@ export default function ProtectedAppShell({ session }) {
     if (active === 'overview' || active === 'notifications') return
     navigate('/app', { replace: true })
   }, [active, isVisitorProfile, navigate])
+
+  useEffect(() => {
+    if (!profile || profile.role === 'visitor') return
+
+    const storedRoleView = loadRoleViewPreference()
+    const resolvedRoleView = resolveRoleViewForProfile(profile, storedRoleView || roleView)
+
+    if (storedRoleView !== resolvedRoleView) {
+      saveRoleViewPreference(resolvedRoleView)
+    }
+
+    if (roleView !== resolvedRoleView) {
+      setRoleView(resolvedRoleView)
+    }
+  }, [profile, roleView])
 
   // dashboard_loaded – feuert wenn Overview-View aktiv und Daten geladen sind.
   // Ref verhindert Doppel-Tracking fuer denselben role_context ohne echten Rollenwechsel.
@@ -524,7 +563,7 @@ export default function ProtectedAppShell({ session }) {
 
   const switchRoleView = useCallback(
     nextRoleView => {
-      if (nextRoleView !== 'organizer' && nextRoleView !== 'exhibitor') return
+      if (!allowedRoleViews.includes(nextRoleView)) return
 
       trackEvent(supabase, {
         event_name: 'role_switched',
@@ -536,7 +575,7 @@ export default function ProtectedAppShell({ session }) {
       setMobileMoreOpen(false)
       navigate('/app')
     },
-    [navigate, roleView]
+    [allowedRoleViews, navigate, roleView]
   )
 
   const handlePrimaryNavigation = useCallback(
@@ -573,6 +612,7 @@ export default function ProtectedAppShell({ session }) {
     () =>
       buildMobileMoreGroups({
         active,
+        canSwitchRoleView,
         moreNavItems,
         openMoreView,
         openStyleGuide,
@@ -582,7 +622,7 @@ export default function ProtectedAppShell({ session }) {
         styleGuideOpen,
         switchRoleView
       }),
-    [active, moreNavItems, openMoreView, openStyleGuide, profile, roleView, styleGuideOpen, switchRoleView]
+    [active, canSwitchRoleView, moreNavItems, openMoreView, openStyleGuide, profile, roleView, styleGuideOpen, switchRoleView]
   )
 
   return (
@@ -672,7 +712,7 @@ export default function ProtectedAppShell({ session }) {
                 )}
               </div>
             )}
-            {!isVisitorProfile && (
+            {canSwitchRoleView && (
               <>
                 <p className="small">Ansicht</p>
                 <div className="tabs">

@@ -384,12 +384,8 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
 
-    // Auf Exhibitor-Ansicht wechseln
-    const exhibitorBtn = page.getByTestId('role-view-exhibitor')
-    if (await exhibitorBtn.isVisible()) {
-      await exhibitorBtn.click()
-      await page.waitForURL('**/app', { timeout: 5000 })
-    }
+    await expect(page.getByTestId('role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('role-view-exhibitor')).toHaveCount(0)
 
     // Mehr-Bereich oeffnen
     const toggleMore = page.getByTestId('sidebar-more-toggle')
@@ -400,7 +396,7 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     // Admin-User: Analytics-Button muss sichtbar sein (is_admin = true, unabhaengig von roleView)
     await expect(
       page.getByTestId('sidebar-more-analytics'),
-      'Admin sieht den Analytics-Button unabhaengig vom aktiven roleView'
+      'Admin sieht den Analytics-Button, ohne automatisch beide Fachrollen zu erhalten'
     ).toBeVisible()
   })
 
@@ -414,13 +410,16 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
   test('ACCESS: Admin sieht Analytics-Dashboard unabhaengig vom roleView in localStorage', async ({ page }) => {
     await ensureAuthenticated(page, 'analytics-dashboard', { skipStyleGuide: true })
 
-    // Exhibitor-Kontext per localStorage setzen –
-    // zuverlaessiger als GUI-Klick + Reload, da keine Race-Condition moeglich.
+    // Falschen Altwert in localStorage setzen.
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
     await page.evaluate(() => {
       localStorage.setItem('marketos-role-view', 'exhibitor')
     })
+
+    await page.goto('/app')
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+    expect(await page.evaluate(() => localStorage.getItem('marketos-role-view'))).toBe('organizer')
 
     // /app/analytics laden – Admin soll trotz exhibitor-localStorage das Dashboard sehen
     await openAnalytics(page)
@@ -481,6 +480,8 @@ test.describe.serial('MarketOS Analytics Dashboard', () => {
     await expect(page.getByTestId('mobile-more-menu')).toBeVisible()
     await expect(page.getByTestId('mobile-more-group-admin')).toContainText('Admin')
     await expect(page.getByTestId('mobile-more-analytics')).toBeVisible()
+    await expect(page.getByTestId('mobile-role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('mobile-role-view-exhibitor')).toHaveCount(0)
   })
 
   // -------------------------------------------------------------------------

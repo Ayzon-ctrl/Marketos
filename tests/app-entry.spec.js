@@ -22,13 +22,6 @@ import {
 } from './helpers/workflow'
 
 test.describe.serial('MarketOS App Entry', () => {
-  let credentials
-
-  test.beforeAll(async ({ browser }) => {
-    const page = await browser.newPage()
-    credentials = await ensureAuthenticated(page, test.info().project.name)
-    await page.close()
-  })
 
   test('APP-ENTRY: Öffentliche Startseite → Dashboard-Button → /app ohne Crash', async ({ page }) => {
     const errors = attachConsoleTracking(page)
@@ -39,7 +32,7 @@ test.describe.serial('MarketOS App Entry', () => {
     })
 
     // Einloggen, dann auf die öffentliche Startseite navigieren
-    await ensureAuthenticated(page, test.info().project.name, { skipStyleGuide: true })
+    await ensureAuthenticated(page, 'app-entry-organizer', { role: 'organizer', skipStyleGuide: true })
     await page.goto('/')
 
     // Public-Shell soll sichtbar sein
@@ -76,8 +69,9 @@ test.describe.serial('MarketOS App Entry', () => {
 
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
     await expect(page.getByTestId('sidebar')).toBeVisible()
-    await expect(page.getByTestId('role-view-organizer')).toBeVisible()
-    await expect(page.getByTestId('role-view-exhibitor')).toBeVisible()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+    await expect(page.getByTestId('role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('role-view-exhibitor')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Besucher', exact: true })).toHaveCount(0)
 
     expect(
@@ -96,7 +90,7 @@ test.describe.serial('MarketOS App Entry', () => {
       pageErrors.push(err.message)
     })
 
-    await ensureAuthenticated(page, test.info().project.name, { skipStyleGuide: true })
+    await ensureAuthenticated(page, 'app-entry-organizer', { role: 'organizer', skipStyleGuide: true })
     await page.goto('/app')
     await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
 
@@ -126,5 +120,70 @@ test.describe.serial('MarketOS App Entry', () => {
     expect(fmtDate('2026-05-01')).toBe('01.05.2026')
     expect(fmtDate('2026-03-09')).toBe('09.03.2026')
     expect(fmtDate('2026-05-13')).toBe('13.05.2026')
+  })
+
+  test('APP-ENTRY: Organizer ignoriert exhibitor-localStorage und sieht keinen Rollenumschalter', async ({ page }) => {
+    const errors = attachConsoleTracking(page)
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem('marketos-role-view', 'exhibitor')
+    })
+
+    await ensureAuthenticated(page, 'role-organizer-only', { role: 'organizer', skipStyleGuide: true })
+    await page.goto('/app')
+
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+    await expect(page.getByTestId('role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('role-view-exhibitor')).toHaveCount(0)
+    expect(await page.evaluate(() => window.localStorage.getItem('marketos-role-view'))).toBe('organizer')
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  test('APP-ENTRY: Exhibitor ignoriert organizer-localStorage und landet in der Ausstelleransicht', async ({ page }) => {
+    const errors = attachConsoleTracking(page)
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem('marketos-role-view', 'organizer')
+    })
+
+    await ensureAuthenticated(page, 'role-exhibitor-only', { role: 'exhibitor', skipStyleGuide: true })
+    await page.goto('/app')
+
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Aussteller Dashboard/i)
+    await expect(page.getByTestId('role-view-organizer')).toHaveCount(0)
+    await expect(page.getByTestId('role-view-exhibitor')).toHaveCount(0)
+    const hasSummaryHero = await page.getByTestId('exhibitor-summary-hero').count()
+    const hasEmptyState = await page.getByTestId('exhibitor-empty-state').count()
+    expect(hasSummaryHero > 0 || hasEmptyState > 0).toBeTruthy()
+    expect(await page.evaluate(() => window.localStorage.getItem('marketos-role-view'))).toBe('exhibitor')
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  test('APP-ENTRY: Rolle both sieht beide Umschalter und kann zwischen den Fachansichten wechseln', async ({ page }) => {
+    const errors = attachConsoleTracking(page)
+
+    await ensureAuthenticated(page, 'role-both', { role: 'both', skipStyleGuide: true })
+    await page.goto('/app')
+
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('role-view-organizer')).toBeVisible()
+    await expect(page.getByTestId('role-view-exhibitor')).toBeVisible()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+    if (await page.getByTestId('style-guide-modal').count()) {
+      await page.getByTestId('style-guide-save').click()
+      await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
+    }
+
+    await page.getByTestId('role-view-exhibitor').click()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Aussteller Dashboard/i)
+
+    await page.getByTestId('role-view-organizer').click()
+    await expect(page.getByTestId('dashboard-topbar')).toContainText(/Veranstalter Dashboard/i)
+
+    await expectNoConsoleErrors(errors)
   })
 })
