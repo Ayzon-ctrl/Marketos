@@ -1,6 +1,8 @@
 ﻿import { useMemo, useState } from 'react'
 import { trackEvent } from '../../lib/analytics'
+import { useEffect, useRef } from 'react'
 import { Globe, Plus, Trash2 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import { getEventVisibilityLabel, validateEventForm } from '../../lib/eventUtils'
 import { getUserErrorMessage } from '../../lib/userError'
@@ -32,6 +34,8 @@ const EXHIBITOR_INFO_FIELDS = [
   'waste_notes',
   'exhibitor_general_notes'
 ]
+
+const EDIT_EVENT_STORAGE_KEY = 'marketos-edit-event-id'
 
 function createEmptyExhibitorInfo() {
   return {
@@ -131,8 +135,12 @@ export default function EventsView({
   reload,
   notify,
   eventIssues,
-  openEventDetail
+  openEventDetail,
+  eventEditIntent = null,
+  clearEventEditIntent
 }) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [form, setForm] = useState(createInitialForm())
   const [formErrors, setFormErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -158,6 +166,7 @@ export default function EventsView({
   const [eventSearch, setEventSearch] = useState('')
   const [visibilityFilter, setVisibilityFilter] = useState('alle')
   const [sortOrder, setSortOrder] = useState('upcoming')
+  const formCardRef = useRef(null)
 
   const visibleEvents = useMemo(() => events.filter(event => event.public_visible), [events])
   const hiddenEvents = events.length - visibleEvents.length
@@ -241,6 +250,53 @@ export default function EventsView({
 
     return sortedEvents
   }, [events, normalizedEventSearch, sortOrder, visibilityFilter])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const queuedStorageValue = window.localStorage.getItem(EDIT_EVENT_STORAGE_KEY)
+    let queuedEventPayload = null
+
+    if (queuedStorageValue?.startsWith('{')) {
+      try {
+        queuedEventPayload = JSON.parse(queuedStorageValue)
+      } catch {
+        queuedEventPayload = null
+      }
+    }
+
+    const queuedEventId =
+      eventEditIntent?.id ||
+      location.state?.editEventId ||
+      queuedEventPayload?.id ||
+      queuedStorageValue
+    if (!queuedEventId || editingEventId === queuedEventId) return
+
+    const queuedEvent = events.find(event => event.id === queuedEventId) || eventEditIntent?.event || queuedEventPayload
+    if (!queuedEvent) return
+
+    if (queuedStorageValue) {
+      window.localStorage.removeItem(EDIT_EVENT_STORAGE_KEY)
+    }
+    editEvent(queuedEvent).then(() => {
+      window.requestAnimationFrame(() => {
+        formCardRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' })
+      })
+      clearEventEditIntent?.()
+      if (location.state?.editEventId) {
+        navigate(location.pathname, { replace: true, state: {} })
+      }
+    })
+  }, [
+    clearEventEditIntent,
+    editingEventId,
+    eventEditIntent,
+    events,
+    location.pathname,
+    location.state,
+    locations,
+    navigate
+  ])
   const hasActiveEventListControls =
     normalizedEventSearch.length > 0 || visibilityFilter !== 'alle' || sortOrder !== 'upcoming'
   const resultCountText =
@@ -850,7 +906,7 @@ export default function EventsView({
 
   return (
     <div className="grid two">
-      <div className="card" data-testid="event-form-card">
+      <div className="card" data-testid="event-form-card" ref={formCardRef}>
         <h2>{editingEventId ? 'Event bearbeiten' : 'Event erstellen'}</h2>
         <p className="muted">
           Events werden zuerst intern gespeichert. Öffentlich sichtbar wird ein Event erst, wenn du

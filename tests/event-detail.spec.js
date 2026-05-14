@@ -19,6 +19,22 @@ import {
   selectCity
 } from './helpers/workflow'
 
+async function expandEventDetailPanels(section, options = { briefing: true, preview: true }) {
+  if (options.briefing) {
+    const briefingPanelCount = await section.getByTestId('event-exhibitor-info-briefing').count()
+    if (briefingPanelCount === 0) {
+      await section.getByTestId('event-exhibitor-info-briefing-toggle').click()
+    }
+  }
+
+  if (options.preview) {
+    const previewPanelCount = await section.getByTestId('event-exhibitor-info-print-preview').count()
+    if (previewPanelCount === 0) {
+      await section.getByTestId('event-exhibitor-info-preview-toggle').click()
+    }
+  }
+}
+
 test.describe.serial('MarketOS Event Detail', () => {
   test('EVENT DETAIL: Veranstalter veröffentlicht Event, verknüpft Händler und nimmt das Event wieder aus der Öffentlichkeit', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'mobile-chromium', 'Kernflow wird auf Desktop geprüft.')
@@ -72,6 +88,7 @@ test.describe.serial('MarketOS Event Detail', () => {
 
       const exhibitorInfoSection = page.getByTestId('event-exhibitor-info-section')
       await expect(exhibitorInfoSection).toBeVisible()
+      await expandEventDetailPanels(exhibitorInfoSection)
       await expect(exhibitorInfoSection).toContainText(/Ausstellerinfos vorbereiten/i)
       await expect(exhibitorInfoSection).toContainText(/wichtigsten Informationen für Aussteller/i)
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-status')).toContainText(
@@ -295,6 +312,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await page.getByTestId('detail-save-participant').click()
       await expect(page.getByTestId('toast-message')).toContainText(/Teilnehmer .*Event hinzugefügt/i)
       await expect(page.getByTestId('event-detail-participants')).toContainText(vendorBusinessName)
+      await expandEventDetailPanels(exhibitorInfoSection)
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-participants')).toContainText(
         /Teilnehmer . Standinformationen/i
       )
@@ -443,6 +461,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await page.goto('/app/events')
       await page.getByTestId('event-card').filter({ hasText: eventTitle }).first().getByTestId('open-event-detail').click()
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
+      await expandEventDetailPanels(exhibitorInfoSection)
 
       const briefingParticipantsText = await exhibitorInfoSection
         .getByTestId('event-exhibitor-info-briefing-participants')
@@ -658,6 +677,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
 
       const exhibitorInfoSection = page.getByTestId('event-exhibitor-info-section')
+      await expandEventDetailPanels(exhibitorInfoSection)
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-status')).toContainText(
         /8 von 8 Pflichtangaben vorhanden/i
       )
@@ -932,6 +952,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
 
       const infoSection = page.getByTestId('event-exhibitor-info-section')
+      await expandEventDetailPanels(infoSection)
 
       // ─── Pflichtanzahl: 8 von 8 ─────────────────────────────────────────
       await expect(infoSection.getByTestId('event-exhibitor-info-status')).toContainText(
@@ -990,6 +1011,85 @@ test.describe.serial('MarketOS Event Detail', () => {
     await expectNoConsoleErrors(errors)
   })
 
+  test('WORKFLOW: EventDetail bündelt Aktionen früher und hält ToDos beim Hinzufügen im Fokus', async ({
+    page
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Workflow wird auf Desktop geprüft.')
+    test.setTimeout(90000)
+
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name)
+    const eventTitle = buildTestEventTitle('WorkflowDetail')
+    const futureEventDate = addDaysBerlin(10)
+    const taskTitle = `Workflow ToDo ${runId}`
+
+    try {
+      await resetUserEvents(credentials)
+      await page.reload()
+      await openEvents(page, false)
+
+      await page.getByTestId('event-title').fill(eventTitle)
+      await page.getByTestId('event-date').fill(futureEventDate)
+      await page.getByTestId('event-opening-time').fill('09:00')
+      await page.getByTestId('event-closing-time').fill('17:00')
+      await selectCity(page, '47475', 'Kamp-Lintfort')
+      await page.getByTestId('save-event').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/noch intern/i)
+
+      const eventCard = page.getByTestId('event-card').filter({ hasText: eventTitle }).first()
+      await eventCard.getByTestId('open-event-detail').click()
+      await expect(page.getByTestId('event-detail-view')).toBeVisible()
+      await expect(page.getByTestId('event-detail-publish')).toBeVisible()
+      await expect(page.getByTestId('event-detail-visibility')).toContainText(/intern/i)
+
+      const participantsBox = await page.getByTestId('event-detail-participants').boundingBox()
+      const tasksBox = await page.getByTestId('event-detail-tasks').boundingBox()
+      const briefingBox = await page.getByTestId('event-exhibitor-info-section').boundingBox()
+      expect(participantsBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(briefingBox?.y ?? 0)
+      expect(tasksBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(briefingBox?.y ?? 0)
+
+      const exhibitorInfoSection = page.getByTestId('event-exhibitor-info-section')
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-edit-event')).toBeVisible()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-toggle')).toBeVisible()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-preview-toggle')).toBeVisible()
+
+      await exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-toggle').click()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing')).toBeVisible()
+      await exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-toggle').click()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing')).toHaveCount(0)
+
+      await exhibitorInfoSection.getByTestId('event-exhibitor-info-preview-toggle').click()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-print-preview')).toBeVisible()
+      await exhibitorInfoSection.getByTestId('event-exhibitor-info-preview-toggle').click()
+      await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-print-preview')).toHaveCount(0)
+
+      const tasksSection = page.getByTestId('event-detail-tasks')
+      await tasksSection.scrollIntoViewIfNeeded()
+      await page.getByTestId('detail-task-title').fill(taskTitle)
+      await page.getByTestId('detail-save-task').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/ToDo .*gespeichert/i)
+      await expect(tasksSection).toContainText(taskTitle)
+      const tasksStillVisible = await tasksSection.evaluate(element => {
+        const rect = element.getBoundingClientRect()
+        return rect.top < window.innerHeight && rect.bottom > 0
+      })
+      expect(tasksStillVisible).toBeTruthy()
+
+      await page.getByTestId('event-detail-publish').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/Event veröffentlicht/i)
+      await expect(page.getByTestId('event-detail-visibility')).toContainText(/öffentlich/i)
+      await expect(page.getByTestId('event-detail-unpublish')).toBeVisible()
+
+      await exhibitorInfoSection.getByTestId('event-exhibitor-info-edit-event').click()
+      await expect(page.getByTestId('event-form-card')).toBeVisible()
+      await expect(page.getByTestId('event-title')).toHaveValue(eventTitle)
+    } finally {
+      await cleanupOwnedTestData(credentials, { eventTitles: [eventTitle] })
+    }
+
+    await expectNoConsoleErrors(errors)
+  })
+
   test('PREISVORSCHAU: Standflächen, Preisranges und Zusatzoptionen werden verständlich im EventDetail angezeigt', async ({
     page
   }, testInfo) => {
@@ -1036,6 +1136,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
 
       const exhibitorSection = page.getByTestId('event-exhibitor-info-section')
+      await expandEventDetailPanels(exhibitorSection, { briefing: false, preview: true })
       const pricingPreview = exhibitorSection.getByTestId('event-stand-pricing-preview')
 
       await expect(pricingPreview).toBeVisible()
@@ -1136,35 +1237,41 @@ test.describe.serial('MarketOS Event Detail', () => {
       await page.goto('/app/events')
       await page.getByTestId('event-card').filter({ hasText: eventTitle }).first().getByTestId('open-event-detail').click()
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
+      await expandEventDetailPanels(exhibitorSection, { briefing: false, preview: true })
+      const refreshedPricingPreview = page
+        .getByTestId('event-exhibitor-info-section')
+        .getByTestId('event-stand-pricing-preview')
 
       // 1. Preisvorschau ist sichtbar
-      await expect(pricingPreview).toBeVisible()
-      await expect(pricingPreview).toContainText(/Preisvorschau für Aussteller/i)
+      await expect(refreshedPricingPreview).toBeVisible()
+      await expect(refreshedPricingPreview).toContainText(/Preisvorschau für Aussteller/i)
 
       // 2. Standoption mit Pauschalpreis (flat)
-      await expect(pricingPreview).toContainText('PW_E2E_Außenstand pauschal')
-      await expect(pricingPreview).toContainText('Pauschale Standgebühr: 35,00 €')
+      await expect(refreshedPricingPreview).toContainText('PW_E2E_Außenstand pauschal')
+      await expect(refreshedPricingPreview).toContainText('Pauschale Standgebühr: 35,00 €')
 
       // 3. Standoption up_to_length
-      await expect(pricingPreview).toContainText('PW_E2E_Stand bis 3m Frontlänge')
-      await expect(pricingPreview).toContainText(/Bis 3 m Frontlänge: 50,00 €/)
+      await expect(refreshedPricingPreview).toContainText('PW_E2E_Stand bis 3m Frontlänge')
+      await expect(refreshedPricingPreview).toContainText(/Bis 3 m Frontlänge: 50,00 €/)
 
       // 4. tiered_length zeigt Preisranges
-      await expect(pricingPreview).toContainText('PW_E2E_Staffelstand Frontlänge')
-      await expect(pricingPreview).toContainText(/Bis 3 m Frontlänge: 40,00 €/)
+      await expect(refreshedPricingPreview).toContainText('PW_E2E_Staffelstand Frontlänge')
+      await expect(refreshedPricingPreview).toContainText(/Bis 3 m Frontlänge: 40,00 €/)
 
       // 5. Preis auf Anfrage
-      await expect(pricingPreview).toContainText(/Preis auf Anfrage/i)
+      await expect(refreshedPricingPreview).toContainText(/Preis auf Anfrage/i)
 
       // 6. Zusatzoption wird angezeigt
-      await expect(pricingPreview).toContainText('PW_E2E_Stromanschluss 16A')
-      await expect(pricingPreview).toContainText('10,00 €')
+      await expect(refreshedPricingPreview).toContainText('PW_E2E_Stromanschluss 16A')
+      await expect(refreshedPricingPreview).toContainText('10,00 €')
 
       // 7. Zusatzoption mit Typ-Label korrekt
-      await expect(pricingPreview).toContainText('Stromanschluss')
+      await expect(refreshedPricingPreview).toContainText('Stromanschluss')
 
       // 9. Keine Bearbeiten-/Löschen-/Anlegen-Buttons in der Vorschau
-      await expect(pricingPreview.getByRole('button', { name: /bearbeiten|löschen|anlegen|hinzufügen|speichern/i })).toHaveCount(0)
+      await expect(
+        refreshedPricingPreview.getByRole('button', { name: /bearbeiten|löschen|anlegen|hinzufügen|speichern/i })
+      ).toHaveCount(0)
 
       // 10. Public Pages zeigen interne Preisinfos nicht
       await page.goto('/markets')

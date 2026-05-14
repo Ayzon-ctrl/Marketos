@@ -56,6 +56,8 @@ if (!env.PW_E2E_PASSWORD) {
 }
 
 const TEST_PASSWORD = env.PW_E2E_PASSWORD
+const AUTH_RETRY_DELAYS_MS = [1200, 2500, 5000]
+const authedClientsByEmail = new Map()
 
 function createTestClient() {
   return createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
@@ -64,6 +66,35 @@ function createTestClient() {
       autoRefreshToken: false
     }
   })
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isAuthRateLimitError(error) {
+  const message = String(error?.message || '')
+  return /rate limit/i.test(message)
+}
+
+async function withAuthRetry(operation) {
+  let lastError = null
+
+  for (let attempt = 0; attempt <= AUTH_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+
+      if (!isAuthRateLimitError(error) || attempt === AUTH_RETRY_DELAYS_MS.length) {
+        throw error
+      }
+
+      await sleep(AUTH_RETRY_DELAYS_MS[attempt])
+    }
+  }
+
+  throw lastError
 }
 
 function stableNumberFromString(input) {
@@ -160,6 +191,7 @@ export function attachConsoleTracking(page) {
   const errors = []
   const ignorePattern =
     /\/rest\/v1\/profiles\?select=\*|\/rest\/v1\/vendor_profiles|\/rest\/v1\/visitor_favorite_events|\/rest\/v1\/visitor_favorite_vendors|\/rest\/v1\/notifications|\/rest\/v1\/public_updates|\/rest\/v1\/subscriptions|\/rest\/v1\/billing_events|\/rest\/v1\/rpc\/get_public_event_vendors|\/rest\/v1\/rpc\/get_public_vendor_events|\/rest\/v1\/rpc\/get_public_event_stand_options|\/rest\/v1\/rpc\/get_public_event_stand_price_tiers|\/rest\/v1\/rpc\/get_public_event_addon_options|\/rest\/v1\/rpc\/track_event|\/rest\/v1\/rpc\/get_analytics_summary|opening_time|closing_time|public_visible/i
+  const authRateLimitPattern = /auth\/v1\/token\?grant_type=password/i
 
   page.on('console', msg => {
     if (msg.type() !== 'error') return
@@ -167,6 +199,7 @@ export function attachConsoleTracking(page) {
     if (/extension|tabs\.outgoing\.message\.ready/i.test(text)) return
     if (/Failed to load resource: the server responded with a status of 401/i.test(text)) return
     if (/Failed to load resource: the server responded with a status of (400|404) \(\)/i.test(text)) return
+    if (/Failed to load resource: the server responded with a status of 429/i.test(text)) return
     if (ignorePattern.test(text)) return
     errors.push(`console:${text}`)
   })
@@ -174,6 +207,7 @@ export function attachConsoleTracking(page) {
   page.on('response', response => {
     if (response.status() < 400) return
     if (response.status() === 401 && /\/rest\/v1\/profiles\?select=\*/i.test(response.url())) return
+    if (response.status() === 429 && authRateLimitPattern.test(response.url())) return
     if (ignorePattern.test(response.url())) return
     errors.push(`response:${response.status()} ${response.url()}`)
   })
@@ -228,6 +262,81 @@ export async function completeStyleGuideIfVisible(page) {
   }
 }
 
+export async function loginViaUi(page, credentials) {
+  const authMarker = page.getByTestId('app-authenticated')
+  const loginForm = page.getByTestId('login-form')
+  const errorMessage = page.locator('.login-card .error').first()
+
+  for (let attempt = 0; attempt <= AUTH_RETRY_DELAYS_MS.length; attempt += 1) {
+    await expect(loginForm).toBeVisible()
+    await page.getByTestId('login-email').fill(credentials.email)
+    await page.getByTestId('login-password').fill(credentials.password)
+    await page.getByTestId('login-submit').click()
+
+    const outcome = await Promise.race([
+      authMarker.waitFor({ state: 'visible', timeout: 15000 }).then(() => 'authenticated').catch(() => null),
+      errorMessage.waitFor({ state: 'visible', timeout: 15000 }).then(() => 'error').catch(() => null)
+    ])
+
+    if (outcome === 'authenticated') return
+
+    const currentError = (await errorMessage.textContent().catch(() => '')) || ''
+    const shouldRetry = outcome !== 'authenticated' && attempt < AUTH_RETRY_DELAYS_MS.length
+
+    if (!shouldRetry) {
+      await expect(authMarker).toBeVisible({ timeout: 15000 })
+      return
+    }
+
+    if (currentError && !isAuthRateLimitError({ message: currentError })) {
+      await page.goto('/login')
+      continue
+    }
+
+    await sleep(AUTH_RETRY_DELAYS_MS[attempt])
+    await page.goto('/login')
+  }
+}
+
+export async function getAuthedClient(credentials) {
+  if (authedClientsByEmail.has(credentials.email)) {
+    return authedClientsByEmail.get(credentials.email)
+  }
+
+  const client = createTestClient()
+  const { error } = await withAuthRetry(() => client.auth.signInWithPassword({
+    email: credentials.email,
+    password: credentials.password
+  }))
+  if (error) throw error
+  authedClientsByEmail.set(credentials.email, client)
+  return client
+}
+
+export async function userExists(credentials) {
+  if (authedClientsByEmail.has(credentials.email)) return true
+
+  const client = createTestClient()
+  const { error } = await withAuthRetry(() => client.auth.signInWithPassword({
+    email: credentials.email,
+    password: credentials.password
+  }))
+  await client.auth.signOut().catch(() => {})
+  return !error
+}
+
+async function waitForAuthenticatedOrDuplicate(page) {
+  const authMarker = page.getByTestId('app-authenticated')
+  const duplicateUserHint = page.getByText(/User already registered/i)
+
+  const result = await Promise.race([
+    authMarker.waitFor({ state: 'visible', timeout: 10000 }).then(() => 'authenticated').catch(() => null),
+    duplicateUserHint.waitFor({ state: 'visible', timeout: 10000 }).then(() => 'duplicate').catch(() => null)
+  ])
+
+  return result
+}
+
 export async function ensureAuthenticated(page, projectName, options = {}) {
   const role = options.role || 'organizer'
   const credentials = getCredentials(projectName, role)
@@ -251,12 +360,15 @@ export async function ensureAuthenticated(page, projectName, options = {}) {
     await page.getByTestId('login-password').fill(credentials.password)
     await page.getByTestId('register-submit').click()
 
-    const duplicateUserHint = page.getByText(/User already registered/i)
-    if (await duplicateUserHint.count()) {
+    const registrationOutcome = await waitForAuthenticatedOrDuplicate(page)
+
+    if (registrationOutcome === 'duplicate') {
       await page.getByRole('button', { name: /Schon Konto\? Einloggen/i }).click()
       await loginViaUi(page, credentials)
+    } else if (registrationOutcome === 'authenticated') {
+      // nothing else to do
     } else {
-      await expect(page.getByTestId('app-authenticated')).toBeVisible()
+      await loginViaUi(page, credentials)
     }
 
     if (options.requireExplicitLogin) {
@@ -269,38 +381,6 @@ export async function ensureAuthenticated(page, projectName, options = {}) {
   await completeProfileSetupIfVisible(page, credentials.displayName)
   if (!options.skipStyleGuide) await completeStyleGuideIfVisible(page)
   return credentials
-}
-
-export async function loginViaUi(page, credentials) {
-  await expect(page.getByTestId('login-form')).toBeVisible()
-  await page.getByTestId('login-email').fill(credentials.email)
-  await page.getByTestId('login-password').fill(credentials.password)
-  await page.getByTestId('login-submit').click()
-  await expect(page.getByTestId('app-authenticated')).toBeVisible()
-}
-
-export async function getAuthedClient(credentials) {
-  const client = createTestClient()
-  const { error } = await client.auth.signInWithPassword({
-    email: credentials.email,
-    password: credentials.password
-  })
-  if (error) throw error
-  return client
-}
-
-export async function getTestLocation(credentials) {
-  const client = await getAuthedClient(credentials)
-  const { data, error } = await client
-    .from('locations')
-    .select('id,name,postal_code')
-    .eq('name', 'Kamp-Lintfort')
-    .eq('postal_code', '47475')
-    .maybeSingle()
-
-  if (error) throw error
-  if (!data) throw new Error('Test-Standort Kamp-Lintfort (47475) wurde nicht gefunden.')
-  return data
 }
 
 export async function createEventRecord(credentials, overrides = {}) {
@@ -406,14 +486,18 @@ export async function setStyleGuideSeen(credentials, value) {
   if (error) throw error
 }
 
-export async function userExists(credentials) {
-  const client = createTestClient()
-  const { error } = await client.auth.signInWithPassword({
-    email: credentials.email,
-    password: credentials.password
-  })
-  await client.auth.signOut().catch(() => {})
-  return !error
+export async function getTestLocation(credentials) {
+  const client = await getAuthedClient(credentials)
+  const { data, error } = await client
+    .from('locations')
+    .select('id,name,postal_code')
+    .eq('name', 'Kamp-Lintfort')
+    .eq('postal_code', '47475')
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('Test-Standort Kamp-Lintfort (47475) wurde nicht gefunden.')
+  return data
 }
 
 export async function cleanupOwnedTestData(credentials, options = {}) {

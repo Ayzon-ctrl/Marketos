@@ -480,6 +480,11 @@
   margin: 0;
 }
 
+.event-detail-action-row {
+  align-items: center;
+  gap: 10px;
+}
+
 .detail-columns {
   align-items: start;
 }

@@ -37,6 +37,7 @@ export default function EventDetailView({
   notify,
   reload,
   closeEventDetail,
+  openEventEditor,
   openParticipantsView,
   linkableVendors = []
 }) {
@@ -51,6 +52,8 @@ export default function EventDetailView({
   const [deletingParticipant, setDeletingParticipant] = useState(false)
   const [exhibitorInfo, setExhibitorInfo] = useState(null)
   const [standPricing, setStandPricing] = useState({ options: [], tiers: [], addons: [] })
+  const [publishing, setPublishing] = useState(false)
+  const [pendingScrollTarget, setPendingScrollTarget] = useState('')
 
   useEffect(() => {
     let active = true
@@ -177,6 +180,18 @@ export default function EventDetailView({
     [publicUpdates, selectedEvent]
   )
 
+  useEffect(() => {
+    if (!pendingScrollTarget) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = document.querySelector(`[data-testid="event-detail-${pendingScrollTarget}"]`)
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'auto' })
+      setPendingScrollTarget('')
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [eventTasks.length, pendingScrollTarget])
+
   if (!selectedEvent) {
     return (
       <div className="card" data-testid="event-detail-empty">
@@ -207,6 +222,11 @@ export default function EventDetailView({
       linked_vendor_profile_id: linkedVendor?.id || ''
     })
     notify?.('success', 'Teilnehmer zum Bearbeiten geladen.')
+  }
+
+  function handleEditEvent() {
+    if (!selectedEvent?.id) return
+    openEventEditor?.(selectedEvent)
   }
 
   async function addParticipant(event) {
@@ -338,6 +358,7 @@ export default function EventDetailView({
       }
 
       setTaskForm({ title: '', due_date: '', priority: 'medium', scope: 'team' })
+      setPendingScrollTarget('tasks')
       await reload()
       notify?.('success', 'ToDo zum Event gespeichert.')
     } catch (err) {
@@ -424,6 +445,32 @@ export default function EventDetailView({
     }
   }
 
+  async function updateEventVisibility(nextVisible) {
+    if (!selectedEvent?.id || publishing) return
+
+    setPublishing(true)
+    try {
+      const { error } = await supabase
+        .from('events')
+        .update({ public_visible: nextVisible })
+        .eq('id', selectedEvent.id)
+
+      if (error) throw error
+
+      await reload()
+      notify?.(
+        'success',
+        nextVisible
+          ? 'Event veröffentlicht. Es ist jetzt auf Landingpage und Märkten sichtbar.'
+          : 'Event ist jetzt wieder intern.'
+      )
+    } catch (err) {
+      notify?.('error', getUserErrorMessage(err, 'Sichtbarkeit konnte nicht gespeichert werden.'))
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   return (
     <div className="grid" data-testid="event-detail-view">
       <div className="card event-detail-hero">
@@ -464,6 +511,37 @@ export default function EventDetailView({
             </div>
           </div>
         </div>
+        <div className="row compact-wrap event-detail-action-row" data-testid="event-detail-actions">
+          <button
+            className="btn secondary"
+            data-testid="event-detail-edit-event"
+            onClick={handleEditEvent}
+            type="button"
+          >
+            Event bearbeiten
+          </button>
+          {!selectedEvent.public_visible ? (
+            <button
+              className="btn secondary"
+              data-testid="event-detail-publish"
+              disabled={publishing}
+              onClick={() => updateEventVisibility(true)}
+              type="button"
+            >
+              <Globe size={16} /> {publishing ? 'Veröffentlicht...' : 'Veröffentlichen'}
+            </button>
+          ) : (
+            <button
+              className="btn ghost"
+              data-testid="event-detail-unpublish"
+              disabled={publishing}
+              onClick={() => updateEventVisibility(false)}
+              type="button"
+            >
+              <Globe size={16} /> {publishing ? 'Speichert...' : 'Veröffentlichung zurücknehmen'}
+            </button>
+          )}
+        </div>
         <p className="muted event-detail-description">
           {selectedEvent.public_description || selectedEvent.description || 'Dieses Event braucht noch einen verständlichen Beschreibungstext.'}
         </p>
@@ -478,16 +556,6 @@ export default function EventDetailView({
           Event hervorheben - demnächst verfügbar
         </button>
       </div>
-
-      <EventExhibitorInfoSection
-        addonOptions={standPricing.addons}
-        exhibitorInfo={exhibitorInfo}
-        notify={notify}
-        participants={eventParticipants}
-        priceTiers={standPricing.tiers}
-        selectedEvent={selectedEvent}
-        standOptions={standPricing.options}
-      />
 
       <div className="grid three detail-columns">
         <EventParticipantsSection
@@ -528,6 +596,17 @@ export default function EventDetailView({
           setMessageForm={setMessageForm}
         />
       </div>
+
+      <EventExhibitorInfoSection
+        addonOptions={standPricing.addons}
+        exhibitorInfo={exhibitorInfo}
+        notify={notify}
+        onEditEvent={handleEditEvent}
+        participants={eventParticipants}
+        priceTiers={standPricing.tiers}
+        selectedEvent={selectedEvent}
+        standOptions={standPricing.options}
+      />
 
       <div className="card" data-testid="event-public-updates-section">
         <div className="row space-between">

@@ -198,6 +198,7 @@ export default function ProtectedAppShell({ session }) {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [participantViewFilter, setParticipantViewFilter] = useState('alle')
   const [participantViewEventId, setParticipantViewEventId] = useState('')
+  const [eventEditIntent, setEventEditIntent] = useState(null)
   const toastTimerRef = useRef(null)
   const hasTrackedAppEntryRef = useRef(false)
   const lastTrackedDashboardRoleRef = useRef(null)
@@ -478,6 +479,23 @@ export default function ProtectedAppShell({ session }) {
   const closeEventDetail = useCallback(() => {
     navigate(getAppPathForView('events'))
   }, [navigate])
+
+  const openEventEditor = useCallback(
+    eventToEdit => {
+      const eventId = typeof eventToEdit === 'string' ? eventToEdit : eventToEdit?.id || ''
+      setEventEditIntent(
+        eventId
+          ? {
+              id: eventId,
+              event: typeof eventToEdit === 'string' ? null : eventToEdit,
+              requestedAt: Date.now()
+            }
+          : null
+      )
+      navigate(getAppPathForView('events'), { state: { editEventId: eventId || '' } })
+    },
+    [navigate]
+  )
 
   const openView = useCallback(
     view => {
@@ -781,6 +799,7 @@ export default function ProtectedAppShell({ session }) {
               reviews={reviews}
               roleView={roleView}
               selectedEvent={selectedEvent}
+              eventEditIntent={eventEditIntent}
               setParticipantViewEventId={setParticipantViewEventId}
               setParticipantViewFilter={setParticipantViewFilter}
               stats={stats}
@@ -791,6 +810,8 @@ export default function ProtectedAppShell({ session }) {
               vendorProfile={vendorProfile}
               subscription={subscription}
               closeEventDetail={closeEventDetail}
+              clearEventEditIntent={() => setEventEditIntent(null)}
+              openEventEditor={openEventEditor}
             />
           )}
 

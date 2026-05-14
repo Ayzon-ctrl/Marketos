@@ -801,12 +801,15 @@ export default function EventExhibitorInfoSection({
   exhibitorInfo = null,
   participants = [],
   notify,
+  onEditEvent,
   standOptions = [],
   priceTiers = [],
   addonOptions = []
 }) {
   const [copyFeedback, setCopyFeedback] = useState('')
   const [activeCopyVariant, setActiveCopyVariant] = useState('standard')
+  const [briefingExpanded, setBriefingExpanded] = useState(false)
+  const [previewExpanded, setPreviewExpanded] = useState(false)
   const sections = buildSectionItems(selectedEvent, exhibitorInfo)
   const requiredItems = sections.flatMap(section => section.items).filter(item => item.required)
   const availableRequiredItems = requiredItems.filter(item => item.available)
@@ -827,6 +830,11 @@ export default function EventExhibitorInfoSection({
   const selectedCopyVariant =
     copyVariants.find(variant => variant.key === activeCopyVariant) || copyVariants[0]
   const copyMessage = selectedCopyVariant.body
+  const briefingStatusText = `${availableRequiredItems.length} von ${requiredItems.length} Pflichtangaben vorhanden`
+  const briefingMissingText =
+    missingRequiredItems > 0
+      ? `Noch ${missingRequiredItems} Angaben fehlen.`
+      : 'Alle Pflichtangaben sind vorbereitet.'
 
   function handleCopyVariantChange(variantKey) {
     setActiveCopyVariant(variantKey)
@@ -909,7 +917,7 @@ export default function EventExhibitorInfoSection({
           </div>
 
           {preview.missingItems.length > 0 && (
-            <div className="item" data-testid="event-exhibitor-info-briefing-status-missing">
+          <div className="item" data-testid="event-exhibitor-info-briefing-status-missing">
               <strong>Fehlende Pflichtangaben</strong>
               <ul className="muted small">
                 {preview.missingItems.map(item => (
@@ -924,6 +932,17 @@ export default function EventExhibitorInfoSection({
               ? 'Das Briefing ist als Grundlage für Kopie, Versand oder PDF vorbereitet.'
               : 'Ergänze die fehlenden Angaben im Eventformular, bevor du das Briefing weiterverwendest.'}
           </p>
+
+          <div className="row compact-wrap" style={{ marginTop: 8 }}>
+            <button
+              className="btn secondary"
+              data-testid="event-exhibitor-info-edit-event"
+              onClick={onEditEvent}
+              type="button"
+            >
+              Event bearbeiten
+            </button>
+          </div>
         </div>
 
         <div className="grid two">
@@ -945,11 +964,34 @@ export default function EventExhibitorInfoSection({
       </div>
 
       <div className="grid" data-testid="event-exhibitor-info-group-briefing" style={{ gap: 12 }}>
-        <div>
-          <h3 className="section-title">Briefing</h3>
-          <p className="small muted">Diese Inhalte dienen als Grundlage für spätere Kommunikation.</p>
+        <div className="row space-between" style={{ alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <h3 className="section-title">Briefing</h3>
+            <p className="small muted">Diese Inhalte dienen als Grundlage für spätere Kommunikation.</p>
+          </div>
+          <div className="grid" style={{ gap: 8, justifyItems: 'end' }}>
+            <span className={`pill ${briefingReady ? 'ok' : 'status-quality-review'}`}>
+              {briefingStatusText}
+            </span>
+            <p
+              className="small muted"
+              data-testid="event-exhibitor-info-briefing-collapsed-summary"
+            >
+              {briefingMissingText}
+            </p>
+            <button
+              className="btn ghost"
+              data-testid="event-exhibitor-info-briefing-toggle"
+              onClick={() => setBriefingExpanded(current => !current)}
+              type="button"
+            >
+              {briefingExpanded ? 'Briefing ausblenden' : 'Briefing anzeigen'}
+            </button>
+          </div>
         </div>
 
+        {briefingExpanded ? (
+          <>
         <div className="item detail-column" data-testid="event-exhibitor-info-briefing">
           <div>
             <h4 className="section-title">Aussteller-Briefing</h4>
@@ -1235,14 +1277,33 @@ export default function EventExhibitorInfoSection({
             ) : null}
           </div>
         </div>
+          </>
+        ) : null}
       </div>
 
       <div className="grid" data-testid="event-exhibitor-info-group-internal-preview" style={{ gap: 12 }}>
-        <div>
-          <h3 className="section-title">Interne Vorschau</h3>
-          <p className="small muted">Diese Vorschau ist für die interne Prüfung vorbereitet.</p>
+        <div className="row space-between" style={{ alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <h3 className="section-title">Interne Vorschau</h3>
+            <p className="small muted">Diese Vorschau ist für die interne Prüfung vorbereitet.</p>
+          </div>
+          <div className="grid" style={{ gap: 8, justifyItems: 'end' }}>
+            <p className="small muted" data-testid="event-exhibitor-info-preview-collapsed-summary">
+              Preisvorschau und Druckansicht nur bei Bedarf öffnen.
+            </p>
+            <button
+              className="btn ghost"
+              data-testid="event-exhibitor-info-preview-toggle"
+              onClick={() => setPreviewExpanded(current => !current)}
+              type="button"
+            >
+              {previewExpanded ? 'Vorschau ausblenden' : 'Vorschau anzeigen'}
+            </button>
+          </div>
         </div>
 
+        {previewExpanded ? (
+          <>
         <div className="item detail-column" data-testid="event-exhibitor-info-print-preview">
           <div>
             <h4 className="section-title">Druckfreundliche Vorschau</h4>
@@ -1335,6 +1396,8 @@ export default function EventExhibitorInfoSection({
           priceTiers={priceTiers}
           standOptions={standOptions}
         />
+          </>
+        ) : null}
       </div>
 
       <p className="small muted">Bearbeitung, Versand und PDF folgen später.</p>
