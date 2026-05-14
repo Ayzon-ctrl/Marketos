@@ -35,6 +35,13 @@ async function expandEventDetailPanels(section, options = { briefing: true, prev
   }
 }
 
+async function expandParticipantList(section) {
+  const expandedCount = await section.getByTestId('event-detail-participants-list').count()
+  if (expandedCount === 0) {
+    await section.getByTestId('event-detail-participants-toggle').click()
+  }
+}
+
 test.describe.serial('MarketOS Event Detail', () => {
   test('EVENT DETAIL: Veranstalter veröffentlicht Event, verknüpft Händler und nimmt das Event wieder aus der Öffentlichkeit', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'mobile-chromium', 'Kernflow wird auf Desktop geprüft.')
@@ -311,6 +318,7 @@ test.describe.serial('MarketOS Event Detail', () => {
       await page.getByTestId('detail-participant-status').selectOption('bestaetigt')
       await page.getByTestId('detail-save-participant').click()
       await expect(page.getByTestId('toast-message')).toContainText(/Teilnehmer .*Event hinzugefügt/i)
+      await expandParticipantList(page.getByTestId('event-detail-participants'))
       await expect(page.getByTestId('event-detail-participants')).toContainText(vendorBusinessName)
       await expandEventDetailPanels(exhibitorInfoSection)
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-participants')).toContainText(
@@ -1041,12 +1049,20 @@ test.describe.serial('MarketOS Event Detail', () => {
       await expect(page.getByTestId('event-detail-view')).toBeVisible()
       await expect(page.getByTestId('event-detail-publish')).toBeVisible()
       await expect(page.getByTestId('event-detail-visibility')).toContainText(/intern/i)
+      await expect(page.getByTestId('event-detail-participants-collapsed-summary')).toContainText(
+        /0 Teilnehmer/i
+      )
+      await expect(page.getByTestId('event-detail-participants-list')).toHaveCount(0)
 
       const participantsBox = await page.getByTestId('event-detail-participants').boundingBox()
       const tasksBox = await page.getByTestId('event-detail-tasks').boundingBox()
       const briefingBox = await page.getByTestId('event-exhibitor-info-section').boundingBox()
+      const updatesBox = await page.getByTestId('event-public-updates-section').boundingBox()
+      const detailViewBox = await page.getByTestId('event-detail-view').boundingBox()
       expect(participantsBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(briefingBox?.y ?? 0)
       expect(tasksBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(briefingBox?.y ?? 0)
+      expect(updatesBox?.y ?? Number.POSITIVE_INFINITY).toBeGreaterThan(briefingBox?.y ?? 0)
+      expect((updatesBox?.width ?? 0) * 1.5).toBeLessThan(detailViewBox?.width ?? Number.POSITIVE_INFINITY)
 
       const exhibitorInfoSection = page.getByTestId('event-exhibitor-info-section')
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-edit-event')).toBeVisible()
@@ -1062,6 +1078,12 @@ test.describe.serial('MarketOS Event Detail', () => {
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-print-preview')).toBeVisible()
       await exhibitorInfoSection.getByTestId('event-exhibitor-info-preview-toggle').click()
       await expect(exhibitorInfoSection.getByTestId('event-exhibitor-info-print-preview')).toHaveCount(0)
+
+      const participantSection = page.getByTestId('event-detail-participants')
+      await participantSection.getByTestId('event-detail-participants-toggle').click()
+      await expect(participantSection.getByTestId('event-detail-participants-list')).toBeVisible()
+      await participantSection.getByTestId('event-detail-participants-toggle').click()
+      await expect(participantSection.getByTestId('event-detail-participants-list')).toHaveCount(0)
 
       const tasksSection = page.getByTestId('event-detail-tasks')
       await tasksSection.scrollIntoViewIfNeeded()

@@ -557,7 +557,7 @@ export default function EventDetailView({
         </button>
       </div>
 
-      <div className="grid three detail-columns">
+      <div className="grid event-detail-primary-grid detail-columns">
         <EventParticipantsSection
           addParticipant={addParticipant}
           busyParticipant={busy.participant}
@@ -587,14 +587,6 @@ export default function EventDetailView({
           taskSchemaReady={taskSchemaReady}
           toggleTask={toggleTask}
         />
-
-        <EventMessagesSection
-          addMessage={addMessage}
-          busyMessage={busy.message}
-          eventAnnouncements={eventAnnouncements}
-          messageForm={messageForm}
-          setMessageForm={setMessageForm}
-        />
       </div>
 
       <EventExhibitorInfoSection
@@ -607,6 +599,15 @@ export default function EventDetailView({
         selectedEvent={selectedEvent}
         standOptions={standPricing.options}
       />
+
+      <div className="grid two event-detail-secondary-grid">
+        <EventMessagesSection
+          addMessage={addMessage}
+          busyMessage={busy.message}
+          eventAnnouncements={eventAnnouncements}
+          messageForm={messageForm}
+          setMessageForm={setMessageForm}
+        />
 
       <div className="card" data-testid="event-public-updates-section">
         <div className="row space-between">
@@ -660,6 +661,8 @@ export default function EventDetailView({
             </div>
           ))}
         </div>
+      </div>
+
       </div>
 
       <ConfirmModal

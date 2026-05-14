@@ -489,6 +489,25 @@
   align-items: start;
 }
 
+.event-detail-primary-grid {
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+}
+
+.event-detail-secondary-grid {
+  align-items: start;
+}
+
+.event-detail-participants-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.event-detail-participant-list-card,
+.event-detail-public-updates-card {
+  align-content: start;
+}
+
 .detail-column {
   display: grid;
   gap: 14px;
@@ -567,6 +586,17 @@
   margin: 0 0 12px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.participant-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.participant-detail-item {
+  height: 100%;
+  align-content: start;
 }
 
 .participant-filter-chip {
@@ -988,6 +1018,12 @@
   .event-detail-summary {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .event-detail-primary-grid,
+  .event-detail-secondary-grid,
+  .participant-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .participant-row {
