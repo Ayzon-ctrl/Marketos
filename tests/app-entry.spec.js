@@ -18,7 +18,11 @@ import { fmtDate, fmtDateRange, getGreetingForHour, getSetupDate, getTeardownDat
 import {
   attachConsoleTracking,
   ensureAuthenticated,
-  expectNoConsoleErrors
+  expectNoConsoleErrors,
+  getTestTimeVariant,
+  getTestEquipmentVariant,
+  TEST_TIME_VARIANTS,
+  TEST_EQUIPMENT_VARIANTS
 } from './helpers/workflow'
 
 test.describe.serial('MarketOS App Entry', () => {
@@ -180,6 +184,35 @@ test.describe.serial('MarketOS App Entry', () => {
     expect(getTeardownDate('2026-06-15', null, 1)).toBe('2026-06-16')
     expect(getTeardownDate('2026-06-15', '2026-06-17', 0)).toBe('2026-06-17')
     expect(getTeardownDate('2026-06-15', '2026-06-17', 1)).toBe('2026-06-18')
+  })
+
+  test('APP-ENTRY: getTestTimeVariant und getTestEquipmentVariant sind deterministisch und liefern valide Varianten', async () => {
+    // Gleicher Seed → gleiche Variante (Determinismus)
+    expect(getTestTimeVariant('TestSeed')).toEqual(getTestTimeVariant('TestSeed'))
+    expect(getTestEquipmentVariant('TestSeed')).toEqual(getTestEquipmentVariant('TestSeed'))
+
+    // Rückgabewerte sind echte Elemente aus den Kandidaten-Arrays
+    const time = getTestTimeVariant('TestSeed')
+    expect(TEST_TIME_VARIANTS).toContainEqual(time)
+    expect(time).toHaveProperty('opening_time')
+    expect(time).toHaveProperty('closing_time')
+    expect(time.opening_time).toMatch(/^\d{2}:\d{2}$/)
+    expect(time.closing_time).toMatch(/^\d{2}:\d{2}$/)
+
+    const equip = getTestEquipmentVariant('TestSeed')
+    expect(TEST_EQUIPMENT_VARIANTS).toContainEqual(equip)
+    expect(equip).toHaveProperty('is_indoor')
+    expect(equip).toHaveProperty('is_outdoor')
+    expect(equip).toHaveProperty('is_covered')
+    expect(equip).toHaveProperty('is_accessible')
+
+    // Verschiedene Seeds sollten über alle Kandidaten streuen
+    const timeIndices = new Set(
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].map(s =>
+        TEST_TIME_VARIANTS.indexOf(getTestTimeVariant(s))
+      )
+    )
+    expect(timeIndices.size).toBeGreaterThan(1)
   })
 
   test('APP-ENTRY: Rolle both sieht beide Umschalter und kann zwischen den Fachansichten wechseln', async ({ page }) => {

@@ -8,6 +8,30 @@ export const TEST_PREFIX = 'PW_E2E_'
 
 const credentialsByProject = new Map()
 const LEGACY_TEST_MARKERS = ['Playwright', 'EVENT FLOW', 'EVENT VALIDIERUNG']
+
+const TEST_LOCATION_CANDIDATES = [
+  { name: 'Kamp-Lintfort', postal_code: '47475' },
+  { name: 'Xanten', postal_code: '46509' },
+  { name: 'Moers', postal_code: '47441' },
+  { name: 'Duisburg', postal_code: '47051' },
+  { name: 'Geldern', postal_code: '47608' },
+  { name: 'Düsseldorf', postal_code: '40210' },
+]
+
+export const TEST_TIME_VARIANTS = [
+  { opening_time: '09:00', closing_time: '17:00' },
+  { opening_time: '10:00', closing_time: '18:00' },
+  { opening_time: '11:00', closing_time: '19:00' },
+]
+
+export const TEST_EQUIPMENT_VARIANTS = [
+  { is_indoor: false, is_outdoor: true,  is_covered: false, is_accessible: false },
+  { is_indoor: true,  is_outdoor: false, is_covered: true,  is_accessible: true  },
+  { is_indoor: false, is_outdoor: true,  is_covered: true,  is_accessible: false },
+]
+
+let _locationPool = null
+
 const TEST_VENDOR_CATEGORIES = [
   'Schmuck',
   'Holz',
@@ -160,7 +184,7 @@ export function getCredentials(projectName, role = 'organizer') {
   if (!credentialsByProject.has(key)) {
     const safeProject = projectName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
     credentialsByProject.set(key, {
-      email: `marketos-pw-${safeProject}-${role}-${runId}@example.com`,
+      email: `marketos-pw-${safeProject}-${role}@example.com`,
       password: TEST_PASSWORD,
       displayName: `${TEST_PREFIX}${safeProject}`,
       role
@@ -386,17 +410,28 @@ export async function ensureAuthenticated(page, projectName, options = {}) {
 export async function createEventRecord(credentials, overrides = {}) {
   const client = await getAuthedClient(credentials)
   const user = await getAuthContext(client)
-  const location = await getTestLocation(credentials)
+
+  const titleSeed = overrides.title || buildTestEventTitle('Event')
+  const location = overrides.location_id
+    ? { id: overrides.location_id, name: overrides.location || 'Kamp-Lintfort' }
+    : await getTestLocationVariant(credentials, titleSeed)
+
+  const timeVariant = getTestTimeVariant(titleSeed)
+  const equipmentVariant = getTestEquipmentVariant(titleSeed)
 
   const payload = {
     organizer_id: user.id,
-    title: overrides.title || buildTestEventTitle('Event'),
+    title: titleSeed,
     event_date: overrides.event_date || addDaysBerlin(7),
-    location_id: overrides.location_id || location.id,
-    location: overrides.location || location.name,
+    location_id: location.id,
+    location: location.name,
     public_visible: overrides.public_visible ?? false,
-    opening_time: overrides.opening_time || '10:00',
-    closing_time: overrides.closing_time || '18:00',
+    opening_time: overrides.opening_time || timeVariant.opening_time,
+    closing_time: overrides.closing_time || timeVariant.closing_time,
+    is_indoor: overrides.is_indoor ?? equipmentVariant.is_indoor,
+    is_outdoor: overrides.is_outdoor ?? equipmentVariant.is_outdoor,
+    is_covered: overrides.is_covered ?? equipmentVariant.is_covered,
+    is_accessible: overrides.is_accessible ?? equipmentVariant.is_accessible,
     public_description: overrides.public_description || `${TEST_PREFIX}Sicherheits-Testevent.`
   }
 
@@ -500,12 +535,94 @@ export async function getTestLocation(credentials) {
   return data
 }
 
+export async function getTestLocationPool(credentials) {
+  if (_locationPool) return _locationPool
+
+  const client = await getAuthedClient(credentials)
+  const names = TEST_LOCATION_CANDIDATES.map(c => c.name)
+  const { data, error } = await client
+    .from('locations')
+    .select('id,name,postal_code')
+    .in('name', names)
+
+  if (error) throw error
+
+  // Keep only candidates that exist in the DB; fall back to first result if none found
+  const found = (data || []).filter(row =>
+    TEST_LOCATION_CANDIDATES.some(c => c.name === row.name && c.postal_code === row.postal_code)
+  )
+
+  _locationPool = found.length ? found : (data || [])
+
+  if (!_locationPool.length) {
+    throw new Error('Keine Test-Standorte in der DB gefunden.')
+  }
+
+  return _locationPool
+}
+
+export async function getTestLocationVariant(credentials, seed) {
+  const pool = await getTestLocationPool(credentials)
+  const index = stableNumberFromString(seed) % pool.length
+  return pool[index]
+}
+
+export function getTestTimeVariant(seed) {
+  const index = stableNumberFromString(seed) % TEST_TIME_VARIANTS.length
+  return TEST_TIME_VARIANTS[index]
+}
+
+export function getTestEquipmentVariant(seed) {
+  const index = stableNumberFromString(seed) % TEST_EQUIPMENT_VARIANTS.length
+  return TEST_EQUIPMENT_VARIANTS[index]
+}
+
+export async function selectCityVariant(page, location) {
+  await selectCity(page, location.name, location.name)
+}
+
+/**
+ * Prüft ob öffentliche Test-Events des AKTUELLEN Laufs (erkennbar am runId-Suffix
+ * im Titel) noch sichtbar sind. Alte Runs mit anderem runId werden bewusst ignoriert –
+ * diese gehören zu nicht mehr zugänglichen User-Accounts und können nur mit
+ * Service-Rolle bereinigt werden.
+ */
+export async function verifyNoPublicTestEvents() {
+  const anonClient = getAnonClient()
+  const { data, error } = await anonClient
+    .from('events')
+    .select('id,title')
+    .eq('public_visible', true)
+    .ilike('title', `${TEST_PREFIX}%_${runId}`)
+    .limit(20)
+
+  if (error) throw error
+  return data || []
+}
+
 export async function cleanupOwnedTestData(credentials, options = {}) {
   const client = await getAuthedClient(credentials)
   const user = await getAuthContext(client)
   const { eventIds, vendorIds } = await getOwnedTestArtifacts(client, user.id, options)
 
   if (eventIds.length) {
+    // Force-unpublish first – events become invisible even if subsequent deletion fails
+    await client.from('events').update({ public_visible: false }).in('id', eventIds)
+
+    // Resolve stand-option IDs for price tiers (child table)
+    const { data: standOpts } = await client
+      .from('event_stand_options')
+      .select('id')
+      .in('event_id', eventIds)
+    const standOptIds = (standOpts || []).map(r => r.id)
+
+    if (standOptIds.length) {
+      await safeDelete(client.from('event_stand_price_tiers').delete().in('stand_option_id', standOptIds))
+    }
+
+    await safeDelete(client.from('event_exhibitor_info').delete().in('event_id', eventIds))
+    await safeDelete(client.from('event_stand_options').delete().in('event_id', eventIds))
+    await safeDelete(client.from('event_addon_options').delete().in('event_id', eventIds))
     await safeDelete(client.from('public_updates').delete().eq('author_id', user.id).in('event_id', eventIds))
     await safeDelete(client.from('event_participants').delete().in('event_id', eventIds))
     await safeDelete(client.from('visitor_favorite_events').delete().eq('user_id', user.id).in('event_id', eventIds))
@@ -537,6 +654,23 @@ export async function cleanupEvents(credentials, titles = []) {
 
   if (!eventIds.length) return
 
+  // Force-unpublish first – events become invisible even if subsequent deletion fails
+  await client.from('events').update({ public_visible: false }).in('id', eventIds)
+
+  // Resolve stand-option IDs for price tiers (child table)
+  const { data: standOpts } = await client
+    .from('event_stand_options')
+    .select('id')
+    .in('event_id', eventIds)
+  const standOptIds = (standOpts || []).map(r => r.id)
+
+  if (standOptIds.length) {
+    await safeDelete(client.from('event_stand_price_tiers').delete().in('stand_option_id', standOptIds))
+  }
+
+  await safeDelete(client.from('event_exhibitor_info').delete().in('event_id', eventIds))
+  await safeDelete(client.from('event_stand_options').delete().in('event_id', eventIds))
+  await safeDelete(client.from('event_addon_options').delete().in('event_id', eventIds))
   await safeDelete(client.from('public_updates').delete().eq('author_id', user.id).in('event_id', eventIds))
   await safeDelete(client.from('event_participants').delete().in('event_id', eventIds))
   await safeDelete(client.from('visitor_favorite_events').delete().eq('user_id', user.id).in('event_id', eventIds))

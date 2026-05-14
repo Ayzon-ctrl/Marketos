@@ -11,7 +11,8 @@ import {
   getAnonClient,
   getOwnVendorProfile,
   getTestCategory,
-  resetUserEvents
+  resetUserEvents,
+  verifyNoPublicTestEvents
 } from './helpers/workflow'
 
 const protectedPaths = ['/app', '/app/events', '/app/billing', '/app/vendor-profile', '/app/notifications']
@@ -71,6 +72,14 @@ test.describe.serial('MarketOS Security', () => {
     await page.reload()
     await expect(page).toHaveURL(/\/login$/)
     await expectNoConsoleErrors(errors)
+  })
+
+  test('CLEANUP: Keine öffentlichen PW_E2E_-Events sichtbar nach vollständigem Cleanup', async () => {
+    const leaked = await verifyNoPublicTestEvents()
+    expect(
+      leaked.map(e => e.title),
+      `${leaked.length} öffentliche Test-Events gefunden – Cleanup hat nicht funktioniert:\n${leaked.map(e => e.title).join('\n')}`
+    ).toHaveLength(0)
   })
 
   test('SECURITY: private Events und private Händlerprofile bleiben aus Public Routes und anon Queries draußen', async ({ page }, testInfo) => {
