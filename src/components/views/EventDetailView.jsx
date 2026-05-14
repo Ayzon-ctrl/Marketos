@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, CalendarDays, Globe, MapPin, Plus } from 'lucide-react'
 import { supabase } from '../../supabaseClient'
-import { fmtDate, getEventVisibilityLabel, hasEventQualityIssues } from '../../lib/eventUtils'
+import { fmtDateRange, getEventVisibilityLabel, hasEventQualityIssues } from '../../lib/eventUtils'
 import { getUserErrorMessage } from '../../lib/userError'
 import {
   getParticipantStatusErrorMessage,
@@ -65,7 +65,7 @@ export default function EventDetailView({
         const { data, error } = await supabase
           .from('event_exhibitor_info')
           .select(
-            'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes'
+            'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes,setup_day_offset,teardown_day_offset'
           )
           .eq('event_id', eventId)
           .maybeSingle()
@@ -450,7 +450,7 @@ export default function EventDetailView({
             <h2 data-testid="event-detail-title">{selectedEvent.title || 'Ohne Eventname'}</h2>
             <div className="event-detail-meta">
               <span>
-                <CalendarDays size={16} /> {fmtDate(selectedEvent.event_date)}
+                <CalendarDays size={16} /> {fmtDateRange(selectedEvent.event_date, selectedEvent.end_date)}
               </span>
               <span>
                 <MapPin size={16} /> {selectedEvent.location || 'Stadt offen'}

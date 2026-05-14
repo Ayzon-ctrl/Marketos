@@ -1,6 +1,6 @@
 import { CalendarDays, MapPin, Store } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { fmtDate, fmtOpeningHours } from '../../lib/eventUtils'
+import { fmtDateRange, fmtOpeningHours } from '../../lib/eventUtils'
 
 function boolLabel(value, label) {
   return `${label}: ${value ? 'Ja' : 'Nein'}`
@@ -17,13 +17,13 @@ export default function PublicEventCard({ event }) {
   return (
     <article className="public-card public-event-card" data-testid="public-market-card">
       <div className="public-card-topline">
-        <span className="pill ok">{fmtDate(event.event_date)}</span>
+        <span className="pill ok">{fmtDateRange(event.event_date, event.end_date)}</span>
         <span className="pill">{fmtOpeningHours(event.opening_time, event.closing_time)}</span>
         {event.promotion_type && <span className="pill warn">{promotionLabel(event.promotion_type)}</span>}
       </div>
       <h3>{event.title || 'Ohne Eventname'}</h3>
       <p className="public-meta-line">
-        <CalendarDays size={16} /> {fmtDate(event.event_date)}
+        <CalendarDays size={16} /> {fmtDateRange(event.event_date, event.end_date)}
       </p>
       <p className="public-meta-line">
         <MapPin size={16} /> {event.location || 'Ort folgt'}

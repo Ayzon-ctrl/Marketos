@@ -1,5 +1,5 @@
 import { CalendarDays, Globe, MapPin, Trash2 } from 'lucide-react'
-import { fmtDate, getEventVisibilityLabel } from '../lib/eventUtils'
+import { fmtDateRange, getEventVisibilityLabel } from '../lib/eventUtils'
 
 export default function EventCard({
   event,
@@ -26,7 +26,7 @@ export default function EventCard({
         </div>
       </div>
       <p>
-        <CalendarDays size={16} /> {fmtDate(event.event_date)}
+        <CalendarDays size={16} /> {fmtDateRange(event.event_date, event.end_date)}
       </p>
       <p>
         <MapPin size={16} /> {event.location || 'Stadt fehlt'}

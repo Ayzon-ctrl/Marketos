@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { fmtDate, fmtOpeningHours, fmtTime, getEventVenueFacts } from '../../lib/eventUtils'
+import { fmtDate, fmtDateRange, fmtOpeningHours, fmtTime, getEventVenueFacts, getSetupDate, getTeardownDate } from '../../lib/eventUtils'
 import { getParticipantStatusClass, getParticipantStatusLabel } from '../../lib/participantUtils'
 import EventStandPricingPreview from './EventStandPricingPreview'
 
@@ -12,6 +12,13 @@ function formatTimeWindow(startTime, endTime) {
   if (startTime && endTime) return `${fmtTime(startTime)} – ${fmtTime(endTime)}`
   if (startTime) return `Ab ${fmtTime(startTime)}`
   return `Bis ${fmtTime(endTime)}`
+}
+
+function formatDatePrefixedTimeWindow(dateKey, baseEventDate, startTime, endTime) {
+  const timeWindow = formatTimeWindow(startTime, endTime)
+  if (!timeWindow) return ''
+  if (!dateKey || dateKey === baseEventDate) return timeWindow
+  return `${fmtDate(dateKey)}, ${timeWindow}`
 }
 
 function formatContactLine(name, phone) {
@@ -193,10 +200,15 @@ async function writeTextToClipboard(text) {
 }
 
 function buildSectionItems(event, exhibitorInfo) {
+  const setupDayOffset = exhibitorInfo?.setup_day_offset ?? 0
+  const teardownDayOffset = exhibitorInfo?.teardown_day_offset ?? 0
+  const setupDateKey = getSetupDate(event?.event_date, setupDayOffset)
+  const teardownDateKey = getTeardownDate(event?.event_date, event?.end_date, teardownDayOffset)
+
   const openingHours = fmtOpeningHours(event?.opening_time, event?.closing_time)
   const generalNotes = getTextValue(exhibitorInfo?.exhibitor_general_notes)
-  const setupWindow = formatTimeWindow(exhibitorInfo?.setup_start_time, exhibitorInfo?.setup_end_time)
-  const teardownWindow = formatTimeWindow(exhibitorInfo?.teardown_start_time, exhibitorInfo?.teardown_end_time)
+  const setupWindow = formatDatePrefixedTimeWindow(setupDateKey, event?.event_date, exhibitorInfo?.setup_start_time, exhibitorInfo?.setup_end_time)
+  const teardownWindow = formatDatePrefixedTimeWindow(teardownDateKey, event?.event_date, exhibitorInfo?.teardown_start_time, exhibitorInfo?.teardown_end_time)
   const arrivalNotes = getTextValue(exhibitorInfo?.arrival_notes)
   const accessNotes = getTextValue(exhibitorInfo?.access_notes)
   const contactPerson = formatContactLine(
@@ -224,7 +236,7 @@ function buildSectionItems(event, exhibitorInfo) {
           label: 'Datum',
           required: true,
           available: Boolean(event?.event_date),
-          value: event?.event_date ? fmtDate(event.event_date) : ''
+          value: event?.event_date ? fmtDateRange(event.event_date, event.end_date) : ''
         },
         {
           key: 'location',
@@ -323,12 +335,17 @@ function buildSectionItems(event, exhibitorInfo) {
 }
 
 function buildPreviewData(event, exhibitorInfo, sections, venueFacts) {
+  const setupDayOffset = exhibitorInfo?.setup_day_offset ?? 0
+  const teardownDayOffset = exhibitorInfo?.teardown_day_offset ?? 0
+  const setupDateKey = getSetupDate(event?.event_date, setupDayOffset)
+  const teardownDateKey = getTeardownDate(event?.event_date, event?.end_date, teardownDayOffset)
+
   const title = getTextValue(event?.title)
   const location = getTextValue(event?.location)
   const openingHours = fmtOpeningHours(event?.opening_time, event?.closing_time)
   const description = getTextValue(event?.public_description || event?.description)
-  const setupWindow = formatTimeWindow(exhibitorInfo?.setup_start_time, exhibitorInfo?.setup_end_time)
-  const teardownWindow = formatTimeWindow(exhibitorInfo?.teardown_start_time, exhibitorInfo?.teardown_end_time)
+  const setupWindow = formatDatePrefixedTimeWindow(setupDateKey, event?.event_date, exhibitorInfo?.setup_start_time, exhibitorInfo?.setup_end_time)
+  const teardownWindow = formatDatePrefixedTimeWindow(teardownDateKey, event?.event_date, exhibitorInfo?.teardown_start_time, exhibitorInfo?.teardown_end_time)
   const arrivalNotes = getTextValue(exhibitorInfo?.arrival_notes)
   const accessNotes = getTextValue(exhibitorInfo?.access_notes)
   const exhibitorContactName = getTextValue(exhibitorInfo?.exhibitor_contact_name)
@@ -345,7 +362,7 @@ function buildPreviewData(event, exhibitorInfo, sections, venueFacts) {
 
   return {
     title,
-    date: event?.event_date ? fmtDate(event.event_date) : '',
+    date: event?.event_date ? fmtDateRange(event.event_date, event?.end_date) : '',
     location,
     openingHours: event?.opening_time || event?.closing_time ? openingHours : '',
     description,

@@ -14,7 +14,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { fmtDate, getGreetingForHour } from '../src/lib/eventUtils'
+import { fmtDate, fmtDateRange, getGreetingForHour, getSetupDate, getTeardownDate } from '../src/lib/eventUtils'
 import {
   attachConsoleTracking,
   ensureAuthenticated,
@@ -161,6 +161,25 @@ test.describe.serial('MarketOS App Entry', () => {
     expect(await page.evaluate(() => window.localStorage.getItem('marketos-role-view'))).toBe('exhibitor')
 
     await expectNoConsoleErrors(errors)
+  })
+
+  test('APP-ENTRY: fmtDateRange, getSetupDate und getTeardownDate arbeiten korrekt', async () => {
+    // fmtDateRange
+    expect(fmtDateRange(null, null)).toBe('Ohne Datum')
+    expect(fmtDateRange('2026-06-15', null)).toBe('15.06.2026')
+    expect(fmtDateRange('2026-06-15', '2026-06-15')).toBe('15.06.2026')
+    expect(fmtDateRange('2026-06-15', '2026-06-17')).toBe('15.06.2026 – 17.06.2026')
+
+    // getSetupDate
+    expect(getSetupDate('2026-06-15', 0)).toBe('2026-06-15')
+    expect(getSetupDate('2026-06-15', -1)).toBe('2026-06-14')
+    expect(getSetupDate('2026-06-15', -2)).toBe('2026-06-13')
+
+    // getTeardownDate
+    expect(getTeardownDate('2026-06-15', null, 0)).toBe('2026-06-15')
+    expect(getTeardownDate('2026-06-15', null, 1)).toBe('2026-06-16')
+    expect(getTeardownDate('2026-06-15', '2026-06-17', 0)).toBe('2026-06-17')
+    expect(getTeardownDate('2026-06-15', '2026-06-17', 1)).toBe('2026-06-18')
   })
 
   test('APP-ENTRY: Rolle both sieht beide Umschalter und kann zwischen den Fachansichten wechseln', async ({ page }) => {

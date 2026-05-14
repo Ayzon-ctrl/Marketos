@@ -1348,4 +1348,80 @@ test.describe.serial('MarketOS Event Detail', () => {
 
     await expectNoConsoleErrors(errors)
   })
+
+  test('BRIEFING AUFBAU-/ABBAUZEIT MIT DATUM: Aufbau am Vortag und Abbau am Folgetag zeigen Datum im Briefing', async ({
+    page
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Briefing-Datumsanzeige wird auf Desktop geprüft.')
+    test.setTimeout(60000)
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name)
+    const publicPlatformReady = await isPublicPlatformSchemaReady(credentials)
+    expect(
+      publicPlatformReady,
+      'Public-Event-Schema fehlt noch in Supabase. Bitte public_platform_phase1.sql ausführen.'
+    ).toBeTruthy()
+
+    const eventTitle = buildTestEventTitle('BriefingOffsetEvent')
+    const futureEventDate = addDaysBerlin(14)
+
+    try {
+      await resetUserEvents(credentials)
+      await page.reload()
+      await openEvents(page, false)
+
+      // Event anlegen mit Aufbau am Vortag (-1) und Abbau am Folgetag (+1)
+      await page.getByTestId('event-title').fill(eventTitle)
+      await page.getByTestId('event-date').fill(futureEventDate)
+      await page.getByTestId('event-opening-time').fill('10:00')
+      await page.getByTestId('event-closing-time').fill('18:00')
+      await selectCity(page, '47475', 'Kamp-Lintfort')
+
+      await page.getByTestId('event-setup-day-offset').selectOption('-1')
+      await page.getByTestId('event-setup-start-time').fill('08:00')
+      await page.getByTestId('event-setup-end-time').fill('09:30')
+      await page.getByTestId('event-teardown-day-offset').selectOption('1')
+      await page.getByTestId('event-teardown-start-time').fill('18:15')
+      await page.getByTestId('event-teardown-end-time').fill('20:00')
+      await page.getByTestId('event-arrival-notes').fill(`${eventTitle}_Anfahrt`)
+      await page.getByTestId('event-exhibitor-contact-name').fill('Testleitung')
+      await page.getByTestId('event-exhibitor-contact-phone').fill('+49 111 222333')
+
+      await page.getByTestId('save-event').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/noch intern/i)
+
+      // Event-Detail öffnen
+      await page.getByTestId('event-card').filter({ hasText: eventTitle }).first().getByTestId('open-event-detail').click()
+      await expect(page.getByTestId('event-detail-view')).toBeVisible()
+
+      const exhibitorInfoSection = page.getByTestId('event-exhibitor-info-section')
+      await expandEventDetailPanels(exhibitorInfoSection)
+
+      // Briefing-Setup: Datum des Vortags soll erscheinen (DD.MM.YYYY, 08:00 Uhr – 09:30 Uhr)
+      const setupBriefing = exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-setup')
+      await expect(setupBriefing).toContainText(/\d{2}\.\d{2}\.20\d{2}/)
+      await expect(setupBriefing).toContainText(/08:00/)
+      await expect(setupBriefing).toContainText(/09:30/)
+
+      // Briefing-Teardown: Datum des Folgetags soll erscheinen (DD.MM.YYYY, 18:15 Uhr – 20:00 Uhr)
+      const teardownBriefing = exhibitorInfoSection.getByTestId('event-exhibitor-info-briefing-teardown')
+      await expect(teardownBriefing).toBeVisible()
+      await expect(teardownBriefing).toContainText(/\d{2}\.\d{2}\.20\d{2}/)
+      await expect(teardownBriefing).toContainText(/18:15/)
+      await expect(teardownBriefing).toContainText(/20:00/)
+
+      // Vorschau: Datum-Präfix bei Auf-/Abbau
+      const infoItemSetup = exhibitorInfoSection.getByTestId('event-exhibitor-info-item-setup_time')
+      await expect(infoItemSetup).toContainText(/\d{2}\.\d{2}\.20\d{2}/)
+      await expect(infoItemSetup).toContainText(/08:00/)
+
+      const infoItemTeardown = exhibitorInfoSection.getByTestId('event-exhibitor-info-item-teardown_time')
+      await expect(infoItemTeardown).toContainText(/\d{2}\.\d{2}\.20\d{2}/)
+      await expect(infoItemTeardown).toContainText(/18:15/)
+    } finally {
+      await cleanupOwnedTestData(credentials, { eventTitles: [eventTitle] })
+    }
+
+    await expectNoConsoleErrors(errors)
+  })
 })

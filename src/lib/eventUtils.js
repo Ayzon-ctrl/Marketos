@@ -70,6 +70,26 @@ export function addDaysToDateKey(dateKey, days) {
   return getLocalDateKey(next)
 }
 
+export function fmtDateRange(startDate, endDate) {
+  if (!startDate) return 'Ohne Datum'
+  const start = fmtDate(startDate)
+  if (!endDate || endDate === startDate) return start
+  return `${start} – ${fmtDate(endDate)}`
+}
+
+export function getSetupDate(eventDate, setupDayOffset) {
+  if (!eventDate) return ''
+  const offset = Number.isFinite(Number(setupDayOffset)) ? Number(setupDayOffset) : 0
+  return addDaysToDateKey(eventDate, offset)
+}
+
+export function getTeardownDate(eventDate, endDate, teardownDayOffset) {
+  if (!eventDate) return ''
+  const baseDate = endDate || eventDate
+  const offset = Number.isFinite(Number(teardownDayOffset)) ? Number(teardownDayOffset) : 0
+  return addDaysToDateKey(baseDate, offset)
+}
+
 export function isDateWithinRange(dateKey, startDateKey, endDateKey) {
   if (!dateKey) return false
   return dateKey >= startDateKey && dateKey <= endDateKey
@@ -87,6 +107,9 @@ export function validateEvents(events, locations) {
       if (!event.location_id) problems.push('Stadt fehlt')
       if (event.location_id && !locationIds.has(event.location_id)) {
         problems.push('Stadt-ID ist ungültig')
+      }
+      if (event.end_date && event.event_date && event.end_date < event.event_date) {
+        problems.push('Enddatum vor Startdatum')
       }
 
       return { ...event, problems }
@@ -125,6 +148,9 @@ export function validateEventForm(form) {
   if (!form.title?.trim()) errors.title = 'Eventname ist Pflicht.'
   if (!form.event_date) errors.event_date = 'Datum ist Pflicht.'
   if (!form.location_id) errors.location_id = 'Stadt ist Pflicht.'
+  if (form.end_date && form.event_date && form.end_date < form.event_date) {
+    errors.end_date = 'Enddatum muss gleich oder nach dem Startdatum liegen.'
+  }
 
   return errors
 }

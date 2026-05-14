@@ -1280,4 +1280,161 @@ test.describe.serial('MarketOS Events', () => {
 
     await expectNoConsoleErrors(errors)
   })
+
+  test('MEHRTÄGIGES EVENT: Checkbox aktiviert Enddatum-Feld, Karte zeigt Datumsrange, Reload erhält end_date', async ({
+    page
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Mehrtägiges-Event-Flow wird auf Desktop geprüft.')
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name)
+    const publicPlatformReady = await isPublicPlatformSchemaReady(credentials)
+    expect(
+      publicPlatformReady,
+      'Public-Event-Schema fehlt noch in Supabase. Bitte public_platform_phase1.sql ausführen.'
+    ).toBeTruthy()
+
+    const eventTitle = buildTestEventTitle('MultidayEvent')
+    const startDate = addDaysBerlin(21)
+    const endDate = addDaysBerlin(23)
+
+    try {
+      await resetUserEvents(credentials)
+      await page.reload()
+      await openEvents(page, false)
+
+      // Enddatum-Feld initial nicht sichtbar
+      await expect(page.getByTestId('event-end-date')).toHaveCount(0)
+
+      // Datum + Titel setzen
+      await page.getByTestId('event-title').fill(eventTitle)
+      await page.getByTestId('event-date').fill(startDate)
+
+      // Mehrtägig-Checkbox aktivieren → Enddatum-Feld erscheint (vorbelegt mit Startdatum)
+      await page.getByTestId('event-multiday-toggle').check()
+      await expect(page.getByTestId('event-end-date')).toBeVisible()
+      await expect(page.getByTestId('event-end-date')).toHaveValue(startDate)
+
+      // Enddatum auf 2 Tage später setzen
+      await page.getByTestId('event-end-date').fill(endDate)
+      await selectCity(page, '47475', 'Kamp-Lintfort')
+      await page.getByTestId('save-event').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/noch intern/i)
+
+      // EventCard zeigt Datumsrange (DD.MM.YYYY – DD.MM.YYYY)
+      const eventCard = page.getByTestId('event-card').filter({ hasText: eventTitle }).first()
+      await expect(eventCard).toContainText(startDate.split('-').reverse().join('.'))
+      await expect(eventCard).toContainText(endDate.split('-').reverse().join('.'))
+
+      // Nach Reload: end_date bleibt erhalten
+      await page.reload()
+      await openEvents(page, false)
+      await page.getByTestId('event-card').filter({ hasText: eventTitle }).first().getByTestId('edit-event').click()
+      await expect(page.getByTestId('event-end-date')).toBeVisible()
+      await expect(page.getByTestId('event-end-date')).toHaveValue(endDate)
+
+      // Checkbox deaktivieren → Enddatum-Feld verschwindet
+      await page.getByTestId('event-multiday-toggle').uncheck()
+      await expect(page.getByTestId('event-end-date')).toHaveCount(0)
+    } finally {
+      await cleanupOwnedTestData(credentials, { eventTitles: [eventTitle] })
+    }
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  test('AUFBAU-/ABBAU-OFFSET: Vortag/Folgetag speichern, nach Reload korrekt laden, Import kopiert Offsets aber nicht end_date', async ({
+    page
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Offset-Flow wird auf Desktop geprüft.')
+    test.setTimeout(90000)
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name)
+    const publicPlatformReady = await isPublicPlatformSchemaReady(credentials)
+    expect(
+      publicPlatformReady,
+      'Public-Event-Schema fehlt noch in Supabase. Bitte public_platform_phase1.sql ausführen.'
+    ).toBeTruthy()
+
+    const sourceTitle = buildTestEventTitle('OffsetSource')
+    const targetTitle = buildTestEventTitle('OffsetTarget')
+    const futureDate = addDaysBerlin(28)
+    const endDate = addDaysBerlin(30)
+    const laterDate = addDaysBerlin(60)
+
+    try {
+      await resetUserEvents(credentials)
+      await page.reload()
+      await openEvents(page, false)
+
+      // ─── Quell-Event anlegen: mehrtägig, setup Vortag, teardown Folgetag ──
+      await page.getByTestId('event-title').fill(sourceTitle)
+      await page.getByTestId('event-date').fill(futureDate)
+      await page.getByTestId('event-multiday-toggle').check()
+      await page.getByTestId('event-end-date').fill(endDate)
+      await selectCity(page, '47475', 'Kamp-Lintfort')
+
+      // Aufbau auf Vortag (-1), Abbau auf Folgetag (+1)
+      await page.getByTestId('event-setup-day-offset').selectOption('-1')
+      await page.getByTestId('event-teardown-day-offset').selectOption('1')
+      await page.getByTestId('event-setup-start-time').fill('08:00')
+      await page.getByTestId('event-setup-end-time').fill('09:30')
+      await page.getByTestId('event-teardown-start-time').fill('18:00')
+      await page.getByTestId('event-teardown-end-time').fill('19:30')
+
+      await page.getByTestId('save-event').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/noch intern/i)
+
+      // ─── Hint-Text prüfen ─────────────────────────────────────────────────
+      await expect(page.getByTestId('event-setup-teardown-hint')).toContainText(/Eventtag/i)
+
+      // ─── Nach Reload: Offsets korrekt wiederhergestellt ───────────────────
+      await page.reload()
+      await openEvents(page, false)
+      await page.getByTestId('event-card').filter({ hasText: sourceTitle }).first().getByTestId('edit-event').click()
+
+      await expect(page.getByTestId('event-setup-day-offset')).toHaveValue('-1')
+      await expect(page.getByTestId('event-teardown-day-offset')).toHaveValue('1')
+      await expect(page.getByTestId('event-end-date')).toHaveValue(endDate)
+
+      // ─── Ziel-Event anlegen: kein end_date, keine Offsets ────────────────
+      const client = await getAuthedClient(credentials)
+      const sourceEvent = await client
+        .from('events')
+        .select('id')
+        .eq('title', sourceTitle)
+        .maybeSingle()
+      const sourceEventId = sourceEvent.data?.id
+      expect(sourceEventId).toBeTruthy()
+
+      const targetEvent = await createEventRecord(credentials, {
+        title: targetTitle,
+        public_visible: false,
+        event_date: laterDate
+      })
+
+      // ─── Import: nur Ausstellerinfos vom Quell-Event ──────────────────────
+      await page.reload()
+      await openEvents(page, false)
+      await page.getByTestId('event-card').filter({ hasText: targetTitle }).first().getByTestId('edit-event').click()
+      await expect(page.getByTestId('event-import-section')).toBeVisible()
+      await page.getByTestId('event-import-btn').click()
+      await page.getByTestId('event-import-basics-checkbox').uncheck()
+      await page.getByTestId('event-import-exhibitor-info-checkbox').check()
+      await page.getByTestId('event-import-source-select').selectOption(sourceEventId)
+      await page.getByTestId('event-import-submit').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/übernommen/i)
+
+      // Offsets wurden importiert
+      await expect(page.getByTestId('event-setup-day-offset')).toHaveValue('-1')
+      await expect(page.getByTestId('event-teardown-day-offset')).toHaveValue('1')
+
+      // end_date wurde NICHT importiert (Basisdaten-Import war deaktiviert)
+      await expect(page.getByTestId('event-end-date')).toHaveCount(0)
+      await expect(page.getByTestId('event-date')).toHaveValue(laterDate)
+    } finally {
+      await cleanupOwnedTestData(credentials, { eventTitles: [sourceTitle, targetTitle] })
+    }
+
+    await expectNoConsoleErrors(errors)
+  })
 })

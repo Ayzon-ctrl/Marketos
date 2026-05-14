@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarDays, Heart, MapPin, Store } from 'lucide-react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { fmtDate, fmtOpeningHours, getEventVenueFacts } from '../../lib/eventUtils'
+import { fmtDateRange, fmtOpeningHours, getEventVenueFacts } from '../../lib/eventUtils'
 import { loadEventFavoriteState, loadPublicMarketDetail, toggleEventFavorite } from '../../lib/publicData'
 import PublicStandPricingSection from './PublicStandPricingSection'
 import PublicVendorCard from './PublicVendorCard'
@@ -154,7 +154,7 @@ export default function PublicMarketDetailPage() {
               <h1>{event.title || 'Ohne Eventname'}</h1>
               <div className="public-detail-meta">
                 <span>
-                  <CalendarDays size={16} /> {fmtDate(event.event_date)}
+                  <CalendarDays size={16} /> {fmtDateRange(event.event_date, event.end_date)}
                 </span>
                 <span>
                   <MapPin size={16} /> {event.location || 'Ort folgt'}

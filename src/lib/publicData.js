@@ -105,6 +105,7 @@ function isMissingPromotionsSetup(error) {
 }
 
 async function fetchPublicEventsBase({ limit } = {}) {
+  const today = getLocalDateKey()
   let query = supabase
     .from('events')
     .select(
@@ -112,6 +113,7 @@ async function fetchPublicEventsBase({ limit } = {}) {
         id,
         title,
         event_date,
+        end_date,
         location,
         location_id,
         opening_time,
@@ -128,7 +130,7 @@ async function fetchPublicEventsBase({ limit } = {}) {
       `
     )
     .eq('public_visible', true)
-    .gte('event_date', getLocalDateKey())
+    .or(`end_date.gte.${today},and(end_date.is.null,event_date.gte.${today})`)
     .order('event_date', { ascending: true })
 
   if (limit) query = query.limit(limit)
@@ -280,6 +282,7 @@ export async function loadPublicMarketDetail(eventId) {
         id,
         title,
         event_date,
+        end_date,
         location,
         location_id,
         opening_time,

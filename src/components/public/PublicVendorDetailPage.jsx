@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AtSign, Globe, Heart, Store } from 'lucide-react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { fmtDate } from '../../lib/eventUtils'
+import { fmtDateRange } from '../../lib/eventUtils'
 import { loadPublicVendorDetail, loadVendorFavoriteState, toggleVendorFavorite } from '../../lib/publicData'
 import { sanitizeExternalUrl } from '../../lib/urlSafety'
 import { getUserErrorMessage } from '../../lib/userError'
@@ -258,7 +258,7 @@ export default function PublicVendorDetailPage() {
                 <Link className="item public-linked-item" key={event.event_id} to={`/markets/${event.event_id}`}>
                   <strong>{event.title || 'Ohne Eventname'}</strong>
                   <p className="muted">
-                    {fmtDate(event.event_date)} · {event.location || 'Ort folgt'}
+                    {fmtDateRange(event.event_date, event.end_date)} · {event.location || 'Ort folgt'}
                   </p>
                 </Link>
               ))}

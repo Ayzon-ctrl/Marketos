@@ -60,6 +60,7 @@ function createInitialForm() {
   return {
     title: '',
     event_date: '',
+    end_date: '',
     location_id: '',
     location: null,
     description: '',
@@ -74,6 +75,8 @@ function createInitialForm() {
     has_toilets: false,
     has_food: false,
     public_visible: false,
+    setup_day_offset: 0,
+    teardown_day_offset: 0,
     ...createEmptyExhibitorInfo()
   }
 }
@@ -86,6 +89,7 @@ function buildEventForm(event, locations, exhibitorInfo = null) {
   return {
     title: event.title || '',
     event_date: event.event_date || '',
+    end_date: event.end_date || '',
     location_id: event.location_id || '',
     location: currentLocation,
     description: event.description || '',
@@ -100,6 +104,8 @@ function buildEventForm(event, locations, exhibitorInfo = null) {
     has_toilets: Boolean(event.has_toilets),
     has_food: Boolean(event.has_food),
     public_visible: Boolean(event.public_visible),
+    setup_day_offset: exhibitorInfo?.setup_day_offset ?? 0,
+    teardown_day_offset: exhibitorInfo?.teardown_day_offset ?? 0,
     ...createEmptyExhibitorInfo(),
     ...Object.fromEntries(EXHIBITOR_INFO_FIELDS.map(field => [field, exhibitorInfo?.[field] || '']))
   }
@@ -120,12 +126,17 @@ function buildExhibitorInfoPayload(form) {
     power_notes: form.power_notes.trim() || null,
     parking_notes: form.parking_notes.trim() || null,
     waste_notes: form.waste_notes.trim() || null,
-    exhibitor_general_notes: form.exhibitor_general_notes.trim() || null
+    exhibitor_general_notes: form.exhibitor_general_notes.trim() || null,
+    setup_day_offset: Number(form.setup_day_offset ?? 0),
+    teardown_day_offset: Number(form.teardown_day_offset ?? 0)
   }
 }
 
 function hasExhibitorInfoValues(payload) {
-  return Object.values(payload).some(value => value !== null)
+  return Object.entries(payload).some(([key, value]) => {
+    if (key === 'setup_day_offset' || key === 'teardown_day_offset') return value !== 0
+    return value !== null
+  })
 }
 
 export default function EventsView({
@@ -334,7 +345,7 @@ export default function EventsView({
     const { data, error } = await supabase
       .from('event_exhibitor_info')
       .select(
-        'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes'
+        'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes,setup_day_offset,teardown_day_offset'
       )
       .eq('event_id', eventId)
       .maybeSingle()
@@ -356,7 +367,7 @@ export default function EventsView({
       .from('event_exhibitor_info')
       .upsert({ event_id: eventId, ...payload }, { onConflict: 'event_id' })
       .select(
-        'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes'
+        'setup_start_time,setup_end_time,teardown_start_time,teardown_end_time,arrival_notes,access_notes,exhibitor_contact_name,exhibitor_contact_phone,emergency_contact_name,emergency_contact_phone,power_notes,parking_notes,waste_notes,exhibitor_general_notes,setup_day_offset,teardown_day_offset'
       )
       .single()
 
@@ -617,14 +628,16 @@ export default function EventsView({
       if (importExhibitorInfo) {
         const { data: srcInfo, error: srcInfoErr } = await supabase
           .from('event_exhibitor_info')
-          .select(EXHIBITOR_INFO_FIELDS.join(','))
+          .select(`${EXHIBITOR_INFO_FIELDS.join(',')},setup_day_offset,teardown_day_offset`)
           .eq('event_id', importSourceId)
           .maybeSingle()
         if (srcInfoErr) throw srcInfoErr
 
         updatedForm = {
           ...updatedForm,
-          ...Object.fromEntries(EXHIBITOR_INFO_FIELDS.map(f => [f, srcInfo?.[f] || '']))
+          ...Object.fromEntries(EXHIBITOR_INFO_FIELDS.map(f => [f, srcInfo?.[f] || ''])),
+          setup_day_offset: srcInfo?.setup_day_offset ?? 0,
+          teardown_day_offset: srcInfo?.teardown_day_offset ?? 0
         }
       }
 
@@ -725,7 +738,9 @@ export default function EventsView({
       const exhibitorInfo = await loadEventExhibitorInfo(event.id)
       setForm(current => ({
         ...current,
-        ...Object.fromEntries(EXHIBITOR_INFO_FIELDS.map(field => [field, exhibitorInfo?.[field] || '']))
+        ...Object.fromEntries(EXHIBITOR_INFO_FIELDS.map(field => [field, exhibitorInfo?.[field] || ''])),
+        setup_day_offset: exhibitorInfo?.setup_day_offset ?? 0,
+        teardown_day_offset: exhibitorInfo?.teardown_day_offset ?? 0
       }))
       notify?.('success', 'Event zum Bearbeiten geladen. Pflichtfelder prüfen und speichern.')
     } catch (err) {
@@ -759,6 +774,7 @@ export default function EventsView({
       const payload = {
         title: form.title.trim(),
         event_date: form.event_date,
+        end_date: form.end_date || null,
         location_id: selectedLocation.id,
         location: selectedLocation.name,
         description: form.description.trim() || null,
@@ -960,9 +976,51 @@ export default function EventsView({
                     data-testid="event-date"
                     type="date"
                     value={form.event_date}
-                    onChange={event => setForm(current => ({ ...current, event_date: event.target.value }))}
+                    onChange={event => {
+                      const newDate = event.target.value
+                      setForm(current => ({
+                        ...current,
+                        event_date: newDate,
+                        end_date: current.end_date && current.end_date < newDate ? newDate : current.end_date
+                      }))
+                    }}
                   />
                   {formErrors.event_date && <p className="field-error">{formErrors.event_date}</p>}
+                  <label className="checkbox-row" style={{ marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      data-testid="event-multiday-toggle"
+                      checked={Boolean(form.end_date)}
+                      onChange={e => {
+                        if (!e.target.checked) {
+                          setForm(current => ({ ...current, end_date: '' }))
+                          setFormErrors(current => { const { end_date: _ignored, ...rest } = current; return rest })
+                        } else {
+                          setForm(current => ({ ...current, end_date: current.event_date || '' }))
+                        }
+                      }}
+                    />
+                    <span>Mehrtägiges Event</span>
+                  </label>
+                  {form.end_date !== '' && (
+                    <div className="field-group" style={{ marginTop: 8 }}>
+                      <label>Letzter Eventtag</label>
+                      <input
+                        className={`input ${formErrors.end_date ? 'input-error' : ''}`}
+                        data-testid="event-end-date"
+                        type="date"
+                        value={form.end_date}
+                        min={form.event_date || undefined}
+                        onChange={e => {
+                          setForm(current => ({ ...current, end_date: e.target.value }))
+                          if (formErrors.end_date) {
+                            setFormErrors(current => { const { end_date: _ignored, ...rest } = current; return rest })
+                          }
+                        }}
+                      />
+                      {formErrors.end_date && <p className="field-error">{formErrors.end_date}</p>}
+                    </div>
+                  )}
                 </div>
 
                 <CityAutocomplete
@@ -1147,6 +1205,34 @@ export default function EventsView({
             </div>
             <div className="form-grid form-section-grid-two">
               <div className="field-group">
+                <label>Aufbau am</label>
+                <select
+                  className="input"
+                  data-testid="event-setup-day-offset"
+                  value={form.setup_day_offset}
+                  onChange={event => setForm(current => ({ ...current, setup_day_offset: Number(event.target.value) }))}
+                >
+                  <option value={-2}>2 Tage vor Event</option>
+                  <option value={-1}>Vortag</option>
+                  <option value={0}>Eventtag</option>
+                  {Boolean(form.end_date) && <option value={1}>2. Eventtag</option>}
+                </select>
+              </div>
+              <div className="field-group">
+                <label>Abbau am</label>
+                <select
+                  className="input"
+                  data-testid="event-teardown-day-offset"
+                  value={form.teardown_day_offset}
+                  onChange={event => setForm(current => ({ ...current, teardown_day_offset: Number(event.target.value) }))}
+                >
+                  {Boolean(form.end_date) && <option value={-1}>Vorletzter Eventtag</option>}
+                  <option value={0}>Letzter Eventtag</option>
+                  <option value={1}>Folgetag</option>
+                  <option value={2}>Übernächster Tag</option>
+                </select>
+              </div>
+              <div className="field-group">
                 <label>Aufbau von</label>
                 <input
                   className="input"
@@ -1188,7 +1274,7 @@ export default function EventsView({
               </div>
             </div>
             <p className="field-hint" data-testid="event-setup-teardown-hint">
-              Zeiten beziehen sich aktuell auf den Eventtag – mehrtägige Events und Aufbau am Vortag folgen separat.
+              Aufbau/Abbau-Tag bezieht sich relativ auf den ersten bzw. letzten Eventtag.
             </p>
           </section>
 
