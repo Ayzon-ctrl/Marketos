@@ -98,6 +98,9 @@ test.describe.serial('MarketOS Mobile', () => {
       await page.getByTestId('style-guide-save').click()
       await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
       await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
+      // Warten bis der Theme-Re-render nach dem Style-Guide-Save abgeschlossen ist
+      await page.waitForLoadState('networkidle')
+      await expect(page.getByTestId('mobile-nav-more')).toBeVisible()
     }
 
     await page.getByTestId('mobile-nav-more').click()
