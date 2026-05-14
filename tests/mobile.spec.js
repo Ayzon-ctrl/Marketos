@@ -94,6 +94,12 @@ test.describe.serial('MarketOS Mobile', () => {
     )
     expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile erwartet').toBeFalsy()
 
+    if (await page.getByTestId('style-guide-modal').count()) {
+      await page.getByTestId('style-guide-save').click()
+      await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
+      await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
+    }
+
     await page.getByTestId('mobile-nav-more').click()
     await expect(menu).toHaveCount(0)
     await expect(page.getByTestId('mobile-nav-events')).toBeVisible()

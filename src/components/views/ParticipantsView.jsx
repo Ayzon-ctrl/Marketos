@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import {
-  getParticipantStatusClass,
   getParticipantStatusErrorMessage,
-  getParticipantStatusLabel,
   getParticipantStatusSummary,
   participantFilterOptions,
   participantStatusOptions
 } from '../../lib/participantUtils'
+import ParticipantStatusControls from '../ParticipantStatusControls'
 
 const PARTICIPANT_SORT_PRIORITY = {
   angefragt: 0,
@@ -31,7 +30,10 @@ export default function ParticipantsView({
   participantViewFilter,
   setParticipantViewFilter,
   participantViewEventId,
-  setParticipantViewEventId
+  setParticipantViewEventId,
+  updateParticipantStatus,
+  toggleParticipantPaid,
+  updatingParticipantId = ''
 }) {
   const [form, setForm] = useState({
     event_id: '',
@@ -375,14 +377,16 @@ export default function ParticipantsView({
                       {eventTitleById.get(participant.event_id) || 'Ohne Event'}
                     </p>
                   </div>
-                  <div className="participant-badges">
-                    <span className={getParticipantStatusClass(participant.status)}>
-                      {getParticipantStatusLabel(participant.status)}
-                    </span>
-                    <span className={participant.paid ? 'pill status-payment-paid' : 'pill status-payment-open'}>
-                      {participant.paid ? 'Bezahlt' : 'Offen'}
-                    </span>
-                  </div>
+                  <ParticipantStatusControls
+                    canEdit={roleView !== 'exhibitor'}
+                    disabled={updatingParticipantId === participant.id}
+                    layout="inline"
+                    onPaymentToggle={() => toggleParticipantPaid?.(participant)}
+                    onStatusChange={status => updateParticipantStatus?.(participant, status)}
+                    participant={participant}
+                    paymentTestId="participants-page-paid-toggle"
+                    statusTestId="participants-page-status-select"
+                  />
                 </div>
               </div>
             ))

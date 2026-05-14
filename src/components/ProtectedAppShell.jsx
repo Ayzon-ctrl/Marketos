@@ -27,6 +27,7 @@ import {
   saveStyleGuideSeen,
   seedDemoData
 } from '../lib/dashboardData'
+import { getParticipantStatusErrorMessage, getParticipantStatusLabel } from '../lib/participantUtils'
 import { getUserErrorMessage } from '../lib/userError'
 
 function loadRoleViewPreference() {
@@ -216,6 +217,7 @@ export default function ProtectedAppShell({ session }) {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [participantViewFilter, setParticipantViewFilter] = useState('alle')
   const [participantViewEventId, setParticipantViewEventId] = useState('')
+  const [updatingParticipantId, setUpdatingParticipantId] = useState('')
   const [eventEditIntent, setEventEditIntent] = useState(null)
   const toastTimerRef = useRef(null)
   const hasTrackedAppEntryRef = useRef(false)
@@ -561,6 +563,66 @@ export default function ProtectedAppShell({ session }) {
     [navigate]
   )
 
+  const applyParticipantUpdate = useCallback((participantId, changes) => {
+    const mergeParticipant = participant =>
+      participant.id === participantId ? { ...participant, ...changes } : participant
+
+    setParticipants(current => current.map(mergeParticipant))
+    setExhibitorParticipants(current => current.map(mergeParticipant))
+  }, [])
+
+  const updateParticipantStatus = useCallback(
+    async (participant, status) => {
+      if (!participant?.id || !status) return
+
+      setUpdatingParticipantId(participant.id)
+      try {
+        const { error } = await supabase.from('event_participants').update({ status }).eq('id', participant.id)
+        if (error) throw error
+
+        applyParticipantUpdate(participant.id, { status })
+        notify?.('success', `Teilnehmerstatus auf "${getParticipantStatusLabel(status)}" gesetzt.`)
+      } catch (err) {
+        notify?.('error', `Teilnehmerstatus konnte nicht gespeichert werden: ${getParticipantStatusErrorMessage(err)}`)
+      } finally {
+        setUpdatingParticipantId('')
+      }
+    },
+    [applyParticipantUpdate, notify]
+  )
+
+  const toggleParticipantPaid = useCallback(
+    async participant => {
+      if (!participant?.id) return
+
+      const nextPaid = !participant.paid
+      const nextStatus =
+        participant.status === 'abgesagt'
+          ? 'abgesagt'
+          : nextPaid
+            ? 'bestaetigt'
+            : participant.status || 'angefragt'
+
+      setUpdatingParticipantId(participant.id)
+      try {
+        const { error } = await supabase
+          .from('event_participants')
+          .update({ paid: nextPaid, status: nextStatus })
+          .eq('id', participant.id)
+
+        if (error) throw error
+
+        applyParticipantUpdate(participant.id, { paid: nextPaid, status: nextStatus })
+        notify?.('success', nextPaid ? 'Teilnehmer als bezahlt markiert.' : 'Zahlungsstatus auf offen gesetzt.')
+      } catch (err) {
+        notify?.('error', `Zahlungsstatus konnte nicht aktualisiert werden: ${getParticipantStatusErrorMessage(err)}`)
+      } finally {
+        setUpdatingParticipantId('')
+      }
+    },
+    [applyParticipantUpdate, notify]
+  )
+
   const switchRoleView = useCallback(
     nextRoleView => {
       if (!allowedRoleViews.includes(nextRoleView)) return
@@ -846,6 +908,9 @@ export default function ProtectedAppShell({ session }) {
               taskSchemaReady={taskSchemaReady}
               tasks={tasks}
               templates={templates}
+              toggleParticipantPaid={toggleParticipantPaid}
+              updateParticipantStatus={updateParticipantStatus}
+              updatingParticipantId={updatingParticipantId}
               vendorImages={vendorImages}
               vendorProfile={vendorProfile}
               subscription={subscription}

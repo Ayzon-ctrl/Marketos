@@ -5,7 +5,6 @@ import { fmtDate, getEventVisibilityLabel, hasEventQualityIssues } from '../../l
 import { getUserErrorMessage } from '../../lib/userError'
 import {
   getParticipantStatusErrorMessage,
-  getParticipantStatusLabel,
   getParticipantStatusSummary
 } from '../../lib/participantUtils'
 import { persistTaskMeta } from '../../lib/taskUtils'
@@ -39,7 +38,10 @@ export default function EventDetailView({
   closeEventDetail,
   openEventEditor,
   openParticipantsView,
-  linkableVendors = []
+  linkableVendors = [],
+  updateParticipantStatus,
+  toggleParticipantPaid,
+  updatingParticipantId = ''
 }) {
   const [participantForm, setParticipantForm] = useState(createParticipantForm())
   const [taskForm, setTaskForm] = useState({ title: '', due_date: '', priority: 'medium', scope: 'team' })
@@ -273,40 +275,6 @@ export default function EventDetailView({
       notify?.('error', `Teilnehmer konnte nicht gespeichert werden: ${getParticipantStatusErrorMessage(err)}`)
     } finally {
       setBusy(current => ({ ...current, participant: false }))
-    }
-  }
-
-  async function updateParticipantStatus(participant, status) {
-    try {
-      const { error } = await supabase.from('event_participants').update({ status }).eq('id', participant.id)
-      if (error) throw error
-      await reload()
-      notify?.('success', `Teilnehmerstatus auf "${getParticipantStatusLabel(status)}" gesetzt.`)
-    } catch (err) {
-      notify?.('error', `Teilnehmerstatus konnte nicht gespeichert werden: ${getParticipantStatusErrorMessage(err)}`)
-    }
-  }
-
-  async function toggleParticipantPaid(participant) {
-    try {
-      const nextPaid = !participant.paid
-      const nextStatus =
-        participant.status === 'abgesagt'
-          ? 'abgesagt'
-          : nextPaid
-            ? 'bestaetigt'
-            : participant.status || 'angefragt'
-
-      const { error } = await supabase
-        .from('event_participants')
-        .update({ paid: nextPaid, status: nextStatus })
-        .eq('id', participant.id)
-
-      if (error) throw error
-      await reload()
-      notify?.('success', nextPaid ? 'Teilnehmer als bezahlt markiert.' : 'Zahlungsstatus auf offen gesetzt.')
-    } catch (err) {
-      notify?.('error', `Zahlungsstatus konnte nicht aktualisiert werden: ${getParticipantStatusErrorMessage(err)}`)
     }
   }
 
@@ -574,6 +542,7 @@ export default function EventDetailView({
           setParticipantFilter={setParticipantFilter}
           setParticipantForm={setParticipantForm}
           setParticipantToDelete={setParticipantToDelete}
+          updatingParticipantId={updatingParticipantId}
           toggleParticipantPaid={toggleParticipantPaid}
           updateParticipantStatus={updateParticipantStatus}
         />

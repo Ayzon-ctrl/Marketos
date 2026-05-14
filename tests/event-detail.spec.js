@@ -408,6 +408,47 @@ test.describe.serial('MarketOS Event Detail', () => {
       if (linkedVendorProfileError) throw linkedVendorProfileError
       expect(linkedVendorProfile?.owner_id).toBeTruthy()
 
+      const participantCard = page
+        .getByTestId('detail-participant-item')
+        .filter({ hasText: vendorBusinessName })
+        .first()
+      await participantCard.getByTestId('detail-participant-status-select').selectOption('bestaetigt')
+      await expect(page.getByTestId('toast-message')).toContainText(/Teilnehmerstatus auf "Best.tigt" gesetzt/i)
+      await expect(participantCard).toContainText(/Best.tigt/i)
+      await participantCard.getByTestId('detail-participant-status-select').selectOption('abgesagt')
+      await expect(page.getByTestId('toast-message')).toContainText(/Teilnehmerstatus auf "Abgesagt" gesetzt/i)
+      await expect(participantCard).toContainText(/Abgesagt/i)
+      await participantCard.getByTestId('detail-toggle-paid').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/als bezahlt markiert/i)
+      await expect(participantCard).toContainText(/Bezahlt/i)
+      await participantCard.getByTestId('detail-toggle-paid').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/Zahlungsstatus auf offen gesetzt/i)
+      await expect(participantCard).toContainText(/Offen/i)
+
+      await page.getByTestId('detail-open-participants-view').click()
+      await expect(page).toHaveURL(/\/app\/participants$/)
+      const participantRow = page.getByTestId('participants-page-item').filter({ hasText: vendorBusinessName }).first()
+      await expect(participantRow).toContainText(/Abgesagt/i)
+      await expect(participantRow).toContainText(/Offen/i)
+      await participantRow.getByTestId('participants-page-status-select').selectOption('bestaetigt')
+      await expect(page.getByTestId('toast-message')).toContainText(/Teilnehmerstatus auf "Best.tigt" gesetzt/i)
+      await expect(participantRow).toContainText(/Best.tigt/i)
+      await participantRow.getByTestId('participants-page-paid-toggle').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/als bezahlt markiert/i)
+      await expect(participantRow).toContainText(/Bezahlt/i)
+      await participantRow.getByTestId('participants-page-paid-toggle').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/Zahlungsstatus auf offen gesetzt/i)
+      await expect(participantRow).toContainText(/Offen/i)
+      await page.goto(`/app/events/${savedEvent.id}`)
+      await expect(page.getByTestId('event-detail-view')).toBeVisible()
+      await expandParticipantList(page.getByTestId('event-detail-participants'))
+      await expect(
+        page.getByTestId('detail-participant-item').filter({ hasText: vendorBusinessName }).first()
+      ).toContainText(/Best.tigt/i)
+      await expect(
+        page.getByTestId('detail-participant-item').filter({ hasText: vendorBusinessName }).first()
+      ).toContainText(/Offen/i)
+
       const { error: participantInsertError } = await client.from('event_participants').insert([
         {
           event_id: savedEvent.id,

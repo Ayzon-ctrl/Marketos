@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import {
-  getParticipantStatusClass,
-  getParticipantStatusLabel,
   participantFilterOptions,
   participantStatusOptions
 } from '../../lib/participantUtils'
+import ParticipantStatusControls from '../ParticipantStatusControls'
 
 export default function EventParticipantsSection({
   participantFilter,
@@ -24,7 +23,8 @@ export default function EventParticipantsSection({
   setParticipantToDelete,
   openParticipantsView,
   selectedEvent,
-  linkableVendors = []
+  linkableVendors = [],
+  updatingParticipantId = ''
 }) {
   const [participantsExpanded, setParticipantsExpanded] = useState(false)
 
@@ -203,39 +203,24 @@ export default function EventParticipantsSection({
                       {participant.email || 'Keine E-Mail'} · Stand {participant.booth || '-'}
                     </p>
                   </div>
-                  <div className="participant-badges">
-                    <span className={getParticipantStatusClass(participant.status)}>
-                      {getParticipantStatusLabel(participant.status)}
-                    </span>
-                    <span className={participant.paid ? 'pill status-payment-paid' : 'pill status-payment-open'}>
-                      {participant.paid ? 'Bezahlt' : 'Offen'}
-                    </span>
-                  </div>
+                  <ParticipantStatusControls
+                    canEdit
+                    disabled={updatingParticipantId === participant.id}
+                    layout="inline"
+                    onPaymentToggle={() => toggleParticipantPaid(participant)}
+                    onStatusChange={status => updateParticipantStatus(participant, status)}
+                    participant={participant}
+                    paymentTestId="detail-toggle-paid"
+                    statusTestId="detail-participant-status-select"
+                  />
                 </div>
                 <div className="participant-actions">
                   <div className="participant-actions-main">
-                    <select
-                      className="input participant-status-select"
-                      data-testid="detail-participant-status-select"
-                      value={participant.status || 'angefragt'}
-                      onChange={event => updateParticipantStatus(participant, event.target.value)}
-                    >
-                      {participantStatusOptions.map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                    <p className="muted small participant-status-hint">
+                      Status und Zahlung lassen sich direkt Ã¼ber die Markierungen oben anpassen.
+                    </p>
                   </div>
                   <div className="participant-actions-secondary">
-                    <button
-                      className="btn secondary"
-                      data-testid="detail-toggle-paid"
-                      type="button"
-                      onClick={() => toggleParticipantPaid(participant)}
-                    >
-                      {participant.paid ? 'Als offen markieren' : 'Als bezahlt markieren'}
-                    </button>
                     <button
                       className="btn ghost"
                       data-testid="detail-edit-participant"
