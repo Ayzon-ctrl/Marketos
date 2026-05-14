@@ -1005,13 +1005,12 @@ export default function EventsView({
                 <span className="form-visibility-note form-note-public">Öffentlich sichtbar</span>
               </div>
               <p className="form-section-hint">
-                Zeiten sind optional, helfen Besuchern aber bei der Planung. Wird öffentlich angezeigt, wenn
-                ausgefüllt.
+                Optional, helfen Besuchern bei der Planung. Wird öffentlich angezeigt, wenn ausgefüllt.
               </p>
             </div>
             <div className="form-grid form-section-grid-two">
               <div className="field-group">
-                <label>Öffnungszeit</label>
+                <label>Öffnung von</label>
                 <input
                   className="input"
                   data-testid="event-opening-time"
@@ -1022,7 +1021,7 @@ export default function EventsView({
               </div>
 
               <div className="field-group">
-                <label>Schließzeit</label>
+                <label>Öffnung bis</label>
                 <input
                   className="input"
                   data-testid="event-closing-time"
@@ -1032,6 +1031,9 @@ export default function EventsView({
                 />
               </div>
             </div>
+            <p className="field-hint" data-testid="event-times-hint">
+              Leer lassen, wenn noch nicht bekannt.
+            </p>
           </section>
 
           <section className="form-section form-section-public" data-testid="event-form-section-equipment">
@@ -1136,11 +1138,11 @@ export default function EventsView({
           <section className="form-section form-section-internal" data-testid="event-form-section-exhibitor-info">
             <div className="form-section-header">
               <div className="form-section-header-row">
-                <h3 className="form-section-title">Ausstellerinfos</h3>
+                <h3 className="form-section-title">Aufbau &amp; Abbau</h3>
                 <span className="form-visibility-note form-note-internal">Nur intern sichtbar</span>
               </div>
               <p className="form-section-hint">
-                Diese Angaben bleiben intern und dienen der späteren Ausstellerinfo.
+                Intern für die Ausstellerinfo. Leer lassen, wenn noch nicht bekannt.
               </p>
             </div>
             <div className="form-grid form-section-grid-two">
@@ -1185,6 +1187,9 @@ export default function EventsView({
                 />
               </div>
             </div>
+            <p className="field-hint" data-testid="event-setup-teardown-hint">
+              Zeiten beziehen sich aktuell auf den Eventtag – mehrtägige Events und Aufbau am Vortag folgen separat.
+            </p>
           </section>
 
           <section className="form-section form-section-internal" data-testid="event-form-section-arrival">

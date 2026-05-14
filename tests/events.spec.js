@@ -1215,4 +1215,69 @@ test.describe.serial('MarketOS Events', () => {
 
     await expectNoConsoleErrors(errors)
   })
+
+  test('UHRZEITFELDER: Hinweistexte sind sichtbar und leere Uhrzeitfelder bleiben leer beim Speichern', async ({
+    page
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Formular-UX wird auf Desktop geprüft.')
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name)
+    const publicPlatformReady = await isPublicPlatformSchemaReady(credentials)
+    expect(
+      publicPlatformReady,
+      'Public-Event-Schema fehlt noch in Supabase. Bitte public_platform_phase1.sql ausführen.'
+    ).toBeTruthy()
+
+    const eventTitle = buildTestEventTitle('ZeitfeldTest')
+    const futureEventDate = addDaysBerlin(30)
+
+    try {
+      await resetUserEvents(credentials)
+      await page.reload()
+      await openEvents(page, false)
+
+      // Hinweistexte sind vorhanden
+      await expect(page.getByTestId('event-times-hint')).toContainText(/Leer lassen/i)
+      await expect(page.getByTestId('event-setup-teardown-hint')).toContainText(/Eventtag/i)
+
+      // Alle Uhrzeitfelder starten leer
+      await expect(page.getByTestId('event-opening-time')).toHaveValue('')
+      await expect(page.getByTestId('event-closing-time')).toHaveValue('')
+      await expect(page.getByTestId('event-setup-start-time')).toHaveValue('')
+      await expect(page.getByTestId('event-setup-end-time')).toHaveValue('')
+      await expect(page.getByTestId('event-teardown-start-time')).toHaveValue('')
+      await expect(page.getByTestId('event-teardown-end-time')).toHaveValue('')
+
+      // Event ohne Uhrzeiten speichern
+      await page.getByTestId('event-title').fill(eventTitle)
+      await page.getByTestId('event-date').fill(futureEventDate)
+      await selectCity(page, '47475', 'Kamp-Lintfort')
+      await page.getByTestId('save-event').click()
+      await expect(page.getByTestId('toast-message')).toContainText(/noch intern/i)
+
+      // DB-Prüfung: opening_time und closing_time sind null, nicht 00:00
+      const client = await getAuthedClient(credentials)
+      const { data: savedEvent, error: eventError } = await client
+        .from('events')
+        .select('id,opening_time,closing_time')
+        .eq('title', eventTitle)
+        .maybeSingle()
+      if (eventError) throw eventError
+      expect(savedEvent?.id).toBeTruthy()
+      expect(savedEvent?.opening_time).toBeNull()
+      expect(savedEvent?.closing_time).toBeNull()
+
+      // DB-Prüfung: event_exhibitor_info existiert nicht (keine setup/teardown-Werte)
+      const { data: exhibitorInfo } = await client
+        .from('event_exhibitor_info')
+        .select('id')
+        .eq('event_id', savedEvent.id)
+        .maybeSingle()
+      expect(exhibitorInfo).toBeNull()
+    } finally {
+      await cleanupOwnedTestData(credentials, { eventTitles: [eventTitle] })
+    }
+
+    await expectNoConsoleErrors(errors)
+  })
 })
