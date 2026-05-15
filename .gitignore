@@ -28,3 +28,6 @@ supabase/.temp/
 supabase/*.xlsx
 supabase/*.pdf
 supabase/*.csv
+
+# Local dev/admin scripts (temporaere Hilfsskripte, keine Prod-Relevanz)
+scripts/

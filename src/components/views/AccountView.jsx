@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LogOut } from 'lucide-react'
 import { supabase } from '../../supabaseClient'
-import { getUserErrorMessage } from '../../lib/userError'
+import { getAuthErrorMessage, getUserErrorMessage } from '../../lib/userError'
 
 const ROLE_LABELS = {
   organizer: 'Veranstalter',
@@ -29,6 +29,8 @@ const ROLE_LABELS = {
  *   durch diese View, aber das grundlegende DB-Risiko bleibt bekannt –
  *   Fix folgt separat als DB-Migration mit BEFORE UPDATE Trigger).
  */
+const MIN_PASSWORD_LENGTH = 6
+
 export default function AccountView({ profile, session, notify, onProfileUpdated }) {
   const [form, setForm] = useState({
     display_name: '',
@@ -37,6 +39,49 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
     company_name: '',
   })
   const [saving, setSaving] = useState(false)
+
+  // Passwort-Änderung
+  const [pwForm, setPwForm] = useState({ newPassword: '', confirmPassword: '' })
+  const [pwError, setPwError] = useState('')
+  const [savingPw, setSavingPw] = useState(false)
+
+  const handlePwChange = useCallback(e => {
+    const { name, value } = e.target
+    setPwForm(prev => ({ ...prev, [name]: value }))
+    setPwError('') // Fehler beim Tippen zurücksetzen
+  }, [])
+
+  const handlePasswordSave = useCallback(async e => {
+    e.preventDefault()
+    setPwError('')
+
+    const { newPassword, confirmPassword } = pwForm
+
+    if (!newPassword || !confirmPassword) {
+      setPwError('Bitte beide Felder ausfüllen.')
+      return
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setPwError(`Das Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein.`)
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('Die Passwörter stimmen nicht überein.')
+      return
+    }
+
+    setSavingPw(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      setPwForm({ newPassword: '', confirmPassword: '' })
+      notify('success', 'Passwort wurde geändert.')
+    } catch (err) {
+      setPwError(getAuthErrorMessage(err, 'Passwort konnte nicht geändert werden.'))
+    } finally {
+      setSavingPw(false)
+    }
+  }, [notify, pwForm])
 
   // Formular mit Profildaten befüllen wenn sich profile ändert
   useEffect(() => {
@@ -189,6 +234,59 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
             </p>
           </div>
         )}
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Abschnitt: Sicherheit – Passwort ändern                             */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="card" data-testid="account-security-section">
+        <h3>Sicherheit</h3>
+        <form data-testid="account-password-form" onSubmit={handlePasswordSave}>
+          <p className="small muted" style={{ marginBottom: '12px' }}>Passwort ändern</p>
+
+          <div className="field">
+            <label htmlFor="account-new-password">Neues Passwort</label>
+            <input
+              id="account-new-password"
+              name="newPassword"
+              type="password"
+              className="input"
+              data-testid="account-new-password"
+              autoComplete="new-password"
+              value={pwForm.newPassword}
+              onChange={handlePwChange}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="account-confirm-password">Passwort wiederholen</label>
+            <input
+              id="account-confirm-password"
+              name="confirmPassword"
+              type="password"
+              className="input"
+              data-testid="account-confirm-password"
+              autoComplete="new-password"
+              value={pwForm.confirmPassword}
+              onChange={handlePwChange}
+            />
+          </div>
+
+          {pwError && (
+            <p className="error small" data-testid="account-password-error" style={{ marginBottom: '8px' }}>
+              {pwError}
+            </p>
+          )}
+
+          <button
+            className="btn"
+            type="submit"
+            data-testid="account-password-save"
+            disabled={savingPw}
+          >
+            {savingPw ? 'Wird geändert...' : 'Passwort ändern'}
+          </button>
+        </form>
       </section>
 
       {/* ------------------------------------------------------------------ */}

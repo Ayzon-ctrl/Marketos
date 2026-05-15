@@ -2,15 +2,19 @@
  * ACCOUNT: Konto-Seite /app/account
  *
  * Prüft:
- * 1. Konto-Seite ist über Sidebar-Button erreichbar
- * 2. Konto-Seite ist über Mobile Mehr-Menü erreichbar
- * 3. Profilfelder werden angezeigt
- * 4. Profil speichern persistiert display_name, first_name, last_name, company_name
- * 5. Nach Speichern: Begrüßung übernimmt neuen Anzeigenamen
- * 6. Rolle wird nur angezeigt – kein Bearbeitungsfeld vorhanden
- * 7. is_admin wird nicht im Update-Payload verändert (Sicherheitscheck)
- * 8. Logout auf Konto-Seite führt zurück zum Login
- * 9. Kein Horizontal-Overflow auf Mobile
+ *  1. Konto-Seite ist über Sidebar-Button erreichbar
+ *  2. Sidebar: "Konto & Sitzung"-Label, Button aktiv-State
+ *  3. Konto-Seite ist über Mobile Mehr-Menü erreichbar
+ *  4. Profilfelder werden angezeigt und Rolle ist read-only
+ *  5. Profil speichern persistiert Felder und aktualisiert Begrüßung
+ *  6. is_admin wird durch Profil-Update nicht verändert
+ *  7. Logout leitet zu /login weiter
+ *  8. Mobile: Kein Horizontal-Overflow
+ *  9. Sicherheits-Abschnitt vorhanden, Passwortfelder sichtbar
+ * 10. Passwort-Validierung: leere Felder
+ * 11. Passwort-Validierung: zu kurz
+ * 12. Passwort-Validierung: Mismatch
+ * 13. Passwort-Erfolgspfad (Auth-Anfrage gemockt – kein echter Passwort-Change)
  */
 
 import { test, expect } from '@playwright/test'
@@ -250,5 +254,167 @@ test.describe.serial('MarketOS Account', () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth
     )
     expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile erwartet').toBeFalsy()
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 9: Sicherheits-Abschnitt vorhanden, Passwortfelder sichtbar
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT SICHERHEIT: Sicherheits-Abschnitt vorhanden und Passwortfelder sichtbar', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Abschnitt sichtbar
+    await expect(page.getByTestId('account-security-section')).toBeVisible()
+
+    // Passwortfelder vorhanden
+    await expect(page.getByTestId('account-new-password')).toBeVisible()
+    await expect(page.getByTestId('account-confirm-password')).toBeVisible()
+    await expect(page.getByTestId('account-password-save')).toBeVisible()
+    await expect(page.getByTestId('account-password-save')).toContainText('Passwort ändern')
+
+    // Felder sind vom Typ password (nicht text)
+    await expect(page.getByTestId('account-new-password')).toHaveAttribute('type', 'password')
+    await expect(page.getByTestId('account-confirm-password')).toHaveAttribute('type', 'password')
+
+    // Kein Fehler sichtbar im Ausgangszustand
+    await expect(page.getByTestId('account-password-error')).toHaveCount(0)
+
+    // Profil-Bereich weiterhin stabil
+    await expect(page.getByTestId('account-display-name')).toBeVisible()
+    await expect(page.getByTestId('account-logout-button')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 10: Passwort-Validierung – leere Felder
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT SICHERHEIT: Leere Felder lösen Inline-Fehler aus ohne API-Call', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Direkt auf Speichern klicken ohne Felder zu füllen
+    await page.getByTestId('account-password-save').click()
+
+    // Inline-Fehler erscheint
+    await expect(page.getByTestId('account-password-error')).toBeVisible()
+    await expect(page.getByTestId('account-password-error')).toContainText(/ausfüllen/i)
+
+    // Toast zeigt keine Erfolgs-/Fehlermeldung (wurde nicht abgeschickt)
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 11: Passwort-Validierung – zu kurz
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT SICHERHEIT: Zu kurzes Passwort zeigt Inline-Fehler', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    await page.getByTestId('account-new-password').fill('abc')
+    await page.getByTestId('account-confirm-password').fill('abc')
+    await page.getByTestId('account-password-save').click()
+
+    await expect(page.getByTestId('account-password-error')).toBeVisible()
+    await expect(page.getByTestId('account-password-error')).toContainText(/mindestens 6/i)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 12: Passwort-Validierung – Mismatch
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT SICHERHEIT: Nicht übereinstimmende Passwörter zeigen Inline-Fehler', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    await page.getByTestId('account-new-password').fill('Passwort123')
+    await page.getByTestId('account-confirm-password').fill('AnderesPW99')
+    await page.getByTestId('account-password-save').click()
+
+    await expect(page.getByTestId('account-password-error')).toBeVisible()
+    await expect(page.getByTestId('account-password-error')).toContainText(/stimmen nicht überein/i)
+
+    // Kein API-Call ausgelöst → kein Toast
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 13: Passwort-Erfolgspfad (Auth-PUT gemockt – kein echter Passwort-Change)
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT SICHERHEIT: Erfolgspfad zeigt Toast und leert Felder (Auth-PUT gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Auth PUT /auth/v1/user abfangen – simuliert erfolgreiche Passwortänderung
+    // ohne echten API-Call. Alle anderen Requests laufen normal durch.
+    await page.route('**/auth/v1/user', async route => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'mock-user-id',
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: 'mock@example.com',
+            app_metadata: { provider: 'email', providers: ['email'] },
+            user_metadata: {}
+          })
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    // Valide Eingaben – lang genug, stimmen überein
+    await page.getByTestId('account-new-password').fill('NeuesPasswort99')
+    await page.getByTestId('account-confirm-password').fill('NeuesPasswort99')
+    await page.getByTestId('account-password-save').click()
+
+    // Erfolgs-Toast erscheint
+    await expect(page.getByTestId('toast-message')).toContainText(/Passwort wurde geändert/i, { timeout: 8000 })
+
+    // Felder wurden geleert
+    await expect(page.getByTestId('account-new-password')).toHaveValue('')
+    await expect(page.getByTestId('account-confirm-password')).toHaveValue('')
+
+    // Kein Inline-Fehler
+    await expect(page.getByTestId('account-password-error')).toHaveCount(0)
+
+    // Profil-Bereich unverändert stabil (Regression)
+    await expect(page.getByTestId('account-display-name')).toBeVisible()
+    await expect(page.getByTestId('account-logout-button')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
   })
 })
