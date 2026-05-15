@@ -1,3 +1,4 @@
+import AccountView from './views/AccountView'
 import AnalyticsView from './views/AnalyticsView'
 import AnnouncementsView from './views/AnnouncementsView'
 import BillingView from './views/BillingView'
@@ -15,6 +16,9 @@ import VendorProfileView from './views/VendorProfileView'
 import VisitorOverviewView from './views/VisitorOverviewView'
 
 export default function ContentRouter(props) {
+  // Konto-Seite ist für alle Rollen zugänglich
+  if (props.active === 'account') return <AccountView {...props} />
+
   if (props.profile?.role === 'visitor') {
     if (props.active === 'notifications') return <NotificationsView {...props} />
     return <VisitorOverviewView {...props} />

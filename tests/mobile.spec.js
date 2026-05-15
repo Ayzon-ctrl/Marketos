@@ -58,8 +58,13 @@ test.describe.serial('MarketOS Mobile', () => {
 
     const errors = attachConsoleTracking(page)
 
-    await ensureAuthenticated(page, 'mobile-organizer-only', { role: 'organizer', skipStyleGuide: true })
+    // skipStyleGuide: false → Style Guide wird VOR dem Test-Start geschlossen,
+    // damit er nicht während der Menü-Prüfung als Race Condition auftaucht.
+    await ensureAuthenticated(page, 'mobile-organizer-only', { role: 'organizer', skipStyleGuide: false })
     await page.goto('/app')
+
+    // Sicherstellen dass Style Guide nicht mehr sichtbar ist (doppelte Absicherung)
+    await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
 
     await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
     await expect(page.getByTestId('mobile-nav-more')).toBeVisible()
@@ -83,6 +88,7 @@ test.describe.serial('MarketOS Mobile', () => {
     await expect(page.getByTestId('mobile-open-style-guide')).toBeVisible()
     await expect(page.getByTestId('mobile-role-view-organizer')).toHaveCount(0)
     await expect(page.getByTestId('mobile-role-view-exhibitor')).toHaveCount(0)
+    await expect(page.getByTestId('mobile-more-account')).toBeVisible()
     await expect(page.getByTestId('mobile-logout-button')).toBeVisible()
     await expect(menu).not.toContainText('Besucher')
 
@@ -94,17 +100,10 @@ test.describe.serial('MarketOS Mobile', () => {
     )
     expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile erwartet').toBeFalsy()
 
-    if (await page.getByTestId('style-guide-modal').count()) {
-      await page.getByTestId('style-guide-save').click()
-      await expect(page.getByTestId('style-guide-modal')).toHaveCount(0)
-      await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
-      // Warten bis der Theme-Re-render nach dem Style-Guide-Save abgeschlossen ist
-      await page.waitForLoadState('networkidle')
-      await expect(page.getByTestId('mobile-nav-more')).toBeVisible()
-    }
-
+    // Mehr-Menü schließen
     await page.getByTestId('mobile-nav-more').click()
     await expect(menu).toHaveCount(0)
+    await expect(page.getByTestId('mobile-bottom-nav')).toBeVisible()
     await expect(page.getByTestId('mobile-nav-events')).toBeVisible()
     await expect(page.getByTestId('mobile-nav-overview')).toBeVisible()
     await expectNoConsoleErrors(errors)

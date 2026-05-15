@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Bookmark, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Euro, LogOut, Palette, Store, Users } from 'lucide-react'
+import { Bell, Bookmark, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Euro, LogOut, Palette, Store, User, Users } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 import MobileBottomNav from './MobileBottomNav'
 import ContentRouter from './ContentRouter'
@@ -113,6 +113,13 @@ function buildMobileMoreGroups({
   })
 
   const accountItems = []
+  accountItems.push({
+    key: 'account',
+    label: 'Konto verwalten',
+    active: active === 'account',
+    onClick: () => openMoreView('account'),
+    testId: 'mobile-more-account'
+  })
   if (canSwitchRoleView) {
     accountItems.push({
       key: 'role-organizer',
@@ -670,6 +677,13 @@ export default function ProtectedAppShell({ session }) {
     })
   }, [])
 
+  const handleProfileUpdated = useCallback(updatedProfile => {
+    if (updatedProfile) {
+      setProfile(updatedProfile)
+      setProfileNameDraft(updatedProfile.display_name || '')
+    }
+  }, [])
+
   const mobileMoreGroups = useMemo(
     () =>
       buildMobileMoreGroups({
@@ -798,7 +812,15 @@ export default function ProtectedAppShell({ session }) {
             <div className="shell-utility-group">
               <p className="small muted">Konto</p>
               <button
-                className="btn ghost sidebar-utility-button shell-utility-button shell-logout-button"
+                className={`btn ghost sidebar-utility-button shell-utility-button${active === 'account' ? ' active' : ''}`}
+                data-testid="sidebar-nav-account"
+                onClick={() => openView('account')}
+                type="button"
+              >
+                <User size={16} /> Konto verwalten
+              </button>
+              <button
+                className="btn shell-utility-button shell-logout-button"
                 data-testid="logout-button"
                 onClick={() => supabase.auth.signOut()}
                 type="button"
@@ -888,6 +910,7 @@ export default function ProtectedAppShell({ session }) {
               linkableVendors={linkableVendors}
               notifications={notifications}
               notify={notify}
+              onProfileUpdated={handleProfileUpdated}
               openEventDetail={openEventDetail}
               openParticipantsView={openParticipantsView}
               openView={openView}
@@ -901,6 +924,7 @@ export default function ProtectedAppShell({ session }) {
               reviews={reviews}
               roleView={roleView}
               selectedEvent={selectedEvent}
+              session={session}
               eventEditIntent={eventEditIntent}
               setParticipantViewEventId={setParticipantViewEventId}
               setParticipantViewFilter={setParticipantViewFilter}

@@ -72,6 +72,7 @@ export function getMoreNavItemsForProfile(profile) {
 export function getAppPathForView(view, eventId = '') {
   if (view === 'event-detail' && eventId) return `/app/events/${eventId}`
   if (view === 'analytics') return analyticsNavItem.path
+  if (view === 'account') return '/app/account'
   const match = [...appNav, ...visitorAppNav].find(item => item.key === view)
   return match?.path || '/app'
 }
@@ -80,6 +81,7 @@ export function getAppViewFromPathname(pathname) {
   if (/^\/app\/events\/[^/]+/i.test(pathname)) return 'event-detail'
   if (pathname === '/app' || pathname === '/app/') return 'overview'
   if (pathname === '/app/analytics' || pathname === '/app/analytics/') return 'analytics'
+  if (pathname === '/app/account' || pathname === '/app/account/') return 'account'
   const match = [...appNav, ...visitorAppNav].find(item => item.path !== '/app' && pathname.startsWith(item.path))
   return match?.key || 'overview'
 }

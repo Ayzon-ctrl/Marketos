@@ -22,8 +22,8 @@
 .sidebar-subnav{display:grid;gap:4px;padding:6px 0 4px 10px;border-left:2px solid rgba(255,255,255,.12);margin-left:6px}
 .shell-utility-group{display:grid;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
 .shell-utility-button{width:100%;min-height:44px;font-weight:700}
-.shell-logout-button{color:#fff;border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.16);box-shadow:inset 0 0 0 1px rgba(248,113,113,.08)}
-.shell-logout-button:hover{color:#fff;border-color:rgba(252,165,165,.65);background:rgba(248,113,113,.24)}
+.shell-logout-button{color:#fecaca;border-color:rgba(248,113,113,.6);background:rgba(248,113,113,.22);box-shadow:inset 0 0 0 1px rgba(248,113,113,.12)}
+.shell-logout-button:hover{color:#fff;border-color:rgba(252,165,165,.8);background:rgba(248,113,113,.36)}
 .mobile-shell-utility-group{margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0}
 .mobile-shell-utility-group .shell-logout-button{color:#991b1b;border-color:#fecaca;background:#fff1f2}
 .mobile-shell-utility-group .shell-logout-button:hover{color:#7f1d1d;background:#ffe4e6;border-color:#fca5a5}

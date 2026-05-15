@@ -1,0 +1,213 @@
+import { useCallback, useEffect, useState } from 'react'
+import { LogOut } from 'lucide-react'
+import { supabase } from '../../supabaseClient'
+import { getUserErrorMessage } from '../../lib/userError'
+
+const ROLE_LABELS = {
+  organizer: 'Veranstalter',
+  exhibitor: 'Aussteller',
+  both: 'Veranstalter & Aussteller',
+}
+
+/**
+ * Konto-Seite (/app/account)
+ *
+ * Erlaubt das Bearbeiten von:
+ *   display_name, first_name, last_name, company_name
+ *
+ * Nicht editierbar (read-only oder verborgen):
+ *   email  – kommt aus session.user.email (auth.users, nicht profiles)
+ *   role   – nur anzeigen, kein Formularfeld
+ *   is_admin – nur anzeigen wenn true, kein Formularfeld
+ *   id, created_at – nie im Payload
+ *
+ * Sicherheit: Das Update-Payload enthält bewusst KEINE Felder für
+ *   role oder is_admin. Die bestehende RLS-Policy profiles_update_own
+ *   erlaubt es einem User, sein eigenes Profil zu aktualisieren, enthält
+ *   aber keinen Column-Level-Schutz für is_admin. Daher wird is_admin
+ *   hier strikt aus dem Payload ausgeschlossen (kein Exploit-Risiko
+ *   durch diese View, aber das grundlegende DB-Risiko bleibt bekannt –
+ *   Fix folgt separat als DB-Migration mit BEFORE UPDATE Trigger).
+ */
+export default function AccountView({ profile, session, notify, onProfileUpdated }) {
+  const [form, setForm] = useState({
+    display_name: '',
+    first_name: '',
+    last_name: '',
+    company_name: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  // Formular mit Profildaten befüllen wenn sich profile ändert
+  useEffect(() => {
+    if (!profile) return
+    setForm({
+      display_name: profile.display_name || '',
+      first_name: profile.first_name || '',
+      last_name: profile.last_name || '',
+      company_name: profile.company_name || '',
+    })
+  }, [profile])
+
+  const handleChange = useCallback(e => {
+    const { name, value } = e.target
+    setForm(prev => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleSave = useCallback(async e => {
+    e.preventDefault()
+    if (!profile?.id || saving) return
+
+    setSaving(true)
+    try {
+      // Explizit nur erlaubte Felder senden.
+      // role, is_admin, id, created_at werden bewusst NICHT mitgesendet.
+      const payload = {
+        display_name: form.display_name.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        company_name: form.company_name.trim(),
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(payload)
+        .eq('id', profile.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      onProfileUpdated?.(data)
+      notify('success', 'Profil gespeichert.')
+    } catch (err) {
+      notify('error', getUserErrorMessage(err, 'Profil konnte nicht gespeichert werden.'))
+    } finally {
+      setSaving(false)
+    }
+  }, [form, notify, onProfileUpdated, profile, saving])
+
+  const email = session?.user?.email || '–'
+  const roleLabel = ROLE_LABELS[profile?.role] ?? profile?.role ?? '–'
+  const isAdmin = profile?.is_admin === true
+
+  return (
+    <div className="view-section" data-testid="account-view">
+      <h2>Konto</h2>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Abschnitt: Profil                                                    */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="card" data-testid="account-profile-section">
+        <h3>Profil</h3>
+        <form data-testid="account-profile-form" onSubmit={handleSave}>
+          <div className="field">
+            <label htmlFor="account-display-name">Anzeigename</label>
+            <input
+              id="account-display-name"
+              name="display_name"
+              className="input"
+              data-testid="account-display-name"
+              placeholder="z. B. Edwin"
+              value={form.display_name}
+              onChange={handleChange}
+            />
+            <small className="muted">Erscheint oben in der Begrüßung.</small>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="account-first-name">Vorname</label>
+              <input
+                id="account-first-name"
+                name="first_name"
+                className="input"
+                data-testid="account-first-name"
+                value={form.first_name}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="account-last-name">Nachname</label>
+              <input
+                id="account-last-name"
+                name="last_name"
+                className="input"
+                data-testid="account-last-name"
+                value={form.last_name}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="account-company-name">Firma / Marke</label>
+            <input
+              id="account-company-name"
+              name="company_name"
+              className="input"
+              data-testid="account-company-name"
+              value={form.company_name}
+              onChange={handleChange}
+            />
+          </div>
+
+          <button
+            className="btn"
+            type="submit"
+            data-testid="account-save"
+            disabled={saving}
+          >
+            {saving ? 'Speichert...' : 'Profil speichern'}
+          </button>
+        </form>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Abschnitt: Konto-Info (read-only)                                   */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="card" data-testid="account-info-section">
+        <h3>Konto</h3>
+
+        <div className="field">
+          <label>E-Mail</label>
+          <p className="muted" data-testid="account-email">{email}</p>
+          <small className="muted">E-Mail-Änderung folgt in einer späteren Version.</small>
+        </div>
+
+        <div className="field">
+          <label>Rolle</label>
+          <p data-testid="account-role">{roleLabel}</p>
+          <small className="muted">Rollen-Erweiterung folgt in einer späteren Version.</small>
+        </div>
+
+        {isAdmin && (
+          <div className="field">
+            <label>Status</label>
+            <p data-testid="account-admin-badge">
+              <span className="pill">Admin</span>
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Abschnitt: Sitzung / Logout                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="card" data-testid="account-session-section">
+        <h3>Sitzung</h3>
+        <p className="muted">
+          Du bist als <strong data-testid="account-session-email">{email}</strong> angemeldet.
+        </p>
+        <button
+          className="btn danger-outline"
+          type="button"
+          data-testid="account-logout-button"
+          onClick={() => supabase.auth.signOut()}
+        >
+          <LogOut size={16} /> Abmelden
+        </button>
+      </section>
+    </div>
+  )
+}
