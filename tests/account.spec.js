@@ -15,6 +15,11 @@
  * 11. Passwort-Validierung: zu kurz
  * 12. Passwort-Validierung: Mismatch
  * 13. Passwort-Erfolgspfad (Auth-Anfrage gemockt – kein echter Passwort-Change)
+ * 14. E-Mail-Abschnitt vorhanden, Feld sichtbar und type="email"
+ * 15. E-Mail-Validierung: leeres Feld
+ * 16. E-Mail-Validierung: ungültiges Format
+ * 17. E-Mail-Validierung: identisch mit aktueller E-Mail
+ * 18. E-Mail-Erfolgspfad (Auth-PUT gemockt – kein echter E-Mail-Change)
  */
 
 import { test, expect } from '@playwright/test'
@@ -377,7 +382,8 @@ test.describe.serial('MarketOS Account', () => {
 
     // Auth PUT /auth/v1/user abfangen – simuliert erfolgreiche Passwortänderung
     // ohne echten API-Call. Alle anderen Requests laufen normal durch.
-    await page.route('**/auth/v1/user', async route => {
+    // Regex statt Glob, damit Query-Parameter (z.B. redirect_to) das Match nicht brechen.
+    await page.route(/\/auth\/v1\/user/, async route => {
       if (route.request().method() === 'PUT') {
         await route.fulfill({
           status: 200,
@@ -412,6 +418,179 @@ test.describe.serial('MarketOS Account', () => {
     await expect(page.getByTestId('account-password-error')).toHaveCount(0)
 
     // Profil-Bereich unverändert stabil (Regression)
+    await expect(page.getByTestId('account-display-name')).toBeVisible()
+    await expect(page.getByTestId('account-logout-button')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 14: E-Mail-Abschnitt vorhanden, Feld sichtbar und type="email"
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT E-MAIL: E-Mail-Abschnitt vorhanden, Feld sichtbar und type="email"', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Sicherheits-Abschnitt enthält E-Mail-Formular
+    const secSection = page.getByTestId('account-security-section')
+    await expect(secSection).toBeVisible()
+    await expect(page.getByTestId('account-email-form')).toBeVisible()
+
+    // Aktuelle E-Mail-Anzeige vorhanden
+    await expect(page.getByTestId('account-current-email-display')).toBeVisible()
+
+    // Eingabefeld vorhanden und type="email"
+    const emailInput = page.getByTestId('account-new-email')
+    await expect(emailInput).toBeVisible()
+    await expect(emailInput).toHaveAttribute('type', 'email')
+
+    // Button vorhanden
+    await expect(page.getByTestId('account-email-save')).toBeVisible()
+    await expect(page.getByTestId('account-email-save')).toContainText('E-Mail ändern')
+
+    // Hinweistext sichtbar
+    await expect(page.getByTestId('account-email-form')).toContainText('Bestätigungsmail')
+
+    // Kein Fehler im Ausgangszustand
+    await expect(page.getByTestId('account-email-error')).toHaveCount(0)
+
+    // Passwort-Bereich weiterhin stabil (Regression)
+    await expect(page.getByTestId('account-new-password')).toBeVisible()
+    await expect(page.getByTestId('account-password-save')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 15: E-Mail-Validierung – leeres Feld
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT E-MAIL: Leeres Feld löst Inline-Fehler aus ohne API-Call', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Direkt auf Speichern klicken ohne Feld zu füllen
+    await page.getByTestId('account-email-save').click()
+
+    // Inline-Fehler erscheint
+    await expect(page.getByTestId('account-email-error')).toBeVisible()
+    await expect(page.getByTestId('account-email-error')).toContainText(/neue E-Mail-Adresse ein/i)
+
+    // Kein Toast (kein API-Call)
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 16: E-Mail-Validierung – ungültiges Format
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT E-MAIL: Ungültiges E-Mail-Format zeigt Inline-Fehler', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    await page.getByTestId('account-new-email').fill('keine-email')
+    await page.getByTestId('account-email-save').click()
+
+    await expect(page.getByTestId('account-email-error')).toBeVisible()
+    await expect(page.getByTestId('account-email-error')).toContainText(/gültige E-Mail/i)
+
+    // Kein Toast
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 17: E-Mail-Validierung – identisch mit aktueller E-Mail
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT E-MAIL: Identische E-Mail zeigt Inline-Fehler', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    const credentials = await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Aktuelle E-Mail eingeben (aus Credentials)
+    await page.getByTestId('account-new-email').fill(credentials.email)
+    await page.getByTestId('account-email-save').click()
+
+    await expect(page.getByTestId('account-email-error')).toBeVisible()
+    await expect(page.getByTestId('account-email-error')).toContainText(/entspricht der aktuellen/i)
+
+    // Kein Toast
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 18: E-Mail-Erfolgspfad (Auth-PUT gemockt – kein echter E-Mail-Change)
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT E-MAIL: Erfolgspfad zeigt Toast und leert Feld (Auth-PUT gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Auth PUT /auth/v1/user abfangen – simuliert erfolgreiche E-Mail-Änderung
+    // ohne echten API-Call. Alle anderen Requests laufen normal durch.
+    // Regex statt Glob: emailRedirectTo fügt ?redirect_to=... als Query-Param hinzu,
+    // das Glob **/auth/v1/user würde diese URL nicht matchen.
+    await page.route(/\/auth\/v1\/user/, async route => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'mock-user-id',
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: 'mock@example.com',
+            new_email: 'neue-email@example.com',
+            app_metadata: { provider: 'email', providers: ['email'] },
+            user_metadata: {}
+          })
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    // Neue, valide und andere E-Mail eintragen
+    await page.getByTestId('account-new-email').fill('neue-email@example.com')
+    await page.getByTestId('account-email-save').click()
+
+    // Erfolgs-Toast erscheint
+    await expect(page.getByTestId('toast-message')).toContainText(/Bestätigungsmail wurde gesendet/i, { timeout: 8000 })
+
+    // Feld wurde geleert
+    await expect(page.getByTestId('account-new-email')).toHaveValue('')
+
+    // Kein Inline-Fehler
+    await expect(page.getByTestId('account-email-error')).toHaveCount(0)
+
+    // Passwort-Bereich und Profil-Bereich weiterhin stabil (Regression)
+    await expect(page.getByTestId('account-new-password')).toBeVisible()
     await expect(page.getByTestId('account-display-name')).toBeVisible()
     await expect(page.getByTestId('account-logout-button')).toBeVisible()
 

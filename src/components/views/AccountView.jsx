@@ -45,10 +45,20 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
   const [pwError, setPwError] = useState('')
   const [savingPw, setSavingPw] = useState(false)
 
+  // E-Mail-Änderung
+  const [emailForm, setEmailForm] = useState({ newEmail: '' })
+  const [emailError, setEmailError] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
+
   const handlePwChange = useCallback(e => {
     const { name, value } = e.target
     setPwForm(prev => ({ ...prev, [name]: value }))
     setPwError('') // Fehler beim Tippen zurücksetzen
+  }, [])
+
+  const handleEmailChange = useCallback(e => {
+    setEmailForm(prev => ({ ...prev, newEmail: e.target.value }))
+    setEmailError('') // Fehler beim Tippen zurücksetzen
   }, [])
 
   const handlePasswordSave = useCallback(async e => {
@@ -82,6 +92,41 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
       setSavingPw(false)
     }
   }, [notify, pwForm])
+
+  const handleEmailSave = useCallback(async e => {
+    e.preventDefault()
+    setEmailError('')
+
+    const newEmail = emailForm.newEmail.trim()
+
+    if (!newEmail) {
+      setEmailError('Bitte gib eine neue E-Mail-Adresse ein.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      setEmailError('Bitte gib eine gültige E-Mail-Adresse ein.')
+      return
+    }
+    if (newEmail.toLowerCase() === (session?.user?.email || '').toLowerCase()) {
+      setEmailError('Die neue E-Mail-Adresse entspricht der aktuellen.')
+      return
+    }
+
+    setSavingEmail(true)
+    try {
+      const { error } = await supabase.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: `${window.location.origin}/app/account` }
+      )
+      if (error) throw error
+      setEmailForm({ newEmail: '' })
+      notify('success', 'Bestätigungsmail wurde gesendet. Bitte bestätige die neue Adresse.')
+    } catch (err) {
+      setEmailError(getAuthErrorMessage(err, 'E-Mail konnte nicht geändert werden.'))
+    } finally {
+      setSavingEmail(false)
+    }
+  }, [emailForm.newEmail, notify, session])
 
   // Formular mit Profildaten befüllen wenn sich profile ändert
   useEffect(() => {
@@ -217,7 +262,7 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
         <div className="field">
           <label>E-Mail</label>
           <p className="muted" data-testid="account-email">{email}</p>
-          <small className="muted">E-Mail-Änderung folgt in einer späteren Version.</small>
+          <small className="muted">E-Mail-Adresse kann im Bereich „Sicherheit" geändert werden.</small>
         </div>
 
         <div className="field">
@@ -285,6 +330,52 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
             disabled={savingPw}
           >
             {savingPw ? 'Wird geändert...' : 'Passwort ändern'}
+          </button>
+        </form>
+
+        <form
+          data-testid="account-email-form"
+          onSubmit={handleEmailSave}
+          noValidate
+          style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,.08)' }}
+        >
+          <p className="small muted" style={{ marginBottom: '12px' }}>E-Mail ändern</p>
+
+          <div className="field">
+            <label>Aktuelle E-Mail</label>
+            <p className="muted" data-testid="account-current-email-display">{email}</p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="account-new-email">Neue E-Mail-Adresse</label>
+            <input
+              id="account-new-email"
+              name="newEmail"
+              type="email"
+              className="input"
+              data-testid="account-new-email"
+              autoComplete="email"
+              value={emailForm.newEmail}
+              onChange={handleEmailChange}
+            />
+            <small className="muted">
+              Du erhältst eine Bestätigungsmail an die neue Adresse. Die Änderung wird erst nach Bestätigung aktiv.
+            </small>
+          </div>
+
+          {emailError && (
+            <p className="error small" data-testid="account-email-error" style={{ marginBottom: '8px' }}>
+              {emailError}
+            </p>
+          )}
+
+          <button
+            className="btn"
+            type="submit"
+            data-testid="account-email-save"
+            disabled={savingEmail}
+          >
+            {savingEmail ? 'Wird gesendet...' : 'E-Mail ändern'}
           </button>
         </form>
       </section>
