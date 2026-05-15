@@ -810,9 +810,18 @@ export default function ProtectedAppShell({ session }) {
               </>
             )}
             <div className="shell-utility-group">
-              <p className="small muted">Konto</p>
+              <div className="shell-user-info" data-testid="sidebar-user-info">
+                {(profile?.display_name?.trim() || session?.user?.email) && (
+                  <span className="shell-user-name">
+                    {profile?.display_name?.trim() || session?.user?.email}
+                  </span>
+                )}
+                <span className="small muted" data-testid="sidebar-account-section-label">
+                  Konto &amp; Sitzung
+                </span>
+              </div>
               <button
-                className={`btn ghost sidebar-utility-button shell-utility-button${active === 'account' ? ' active' : ''}`}
+                className={`btn sidebar-utility-button shell-utility-button shell-account-button${active === 'account' ? ' active' : ''}`}
                 data-testid="sidebar-nav-account"
                 onClick={() => openView('account')}
                 type="button"

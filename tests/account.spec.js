@@ -45,7 +45,42 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 2: Konto-Seite über Mobile Mehr-Menü erreichbar
+  // TEST 2: Sidebar Konto-Bereich Struktur und Active-State
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT: Sidebar zeigt "Konto & Sitzung", Button klar erkennbar und active auf /app/account', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Sidebar-Test nur auf Desktop.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app')
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 15000 })
+
+    // Bereich sichtbar
+    await expect(page.getByTestId('sidebar-user-info')).toBeVisible()
+    await expect(page.getByTestId('sidebar-account-section-label')).toContainText('Konto & Sitzung')
+
+    // Button klar sichtbar und klickbar
+    const accountBtn = page.getByTestId('sidebar-nav-account')
+    await expect(accountBtn).toBeVisible()
+    await expect(accountBtn).toContainText('Konto verwalten')
+    // Noch nicht aktiv (wir sind auf /app)
+    await expect(accountBtn).not.toHaveClass(/\bactive\b/)
+
+    // Logout sichtbar
+    await expect(page.getByTestId('logout-button')).toBeVisible()
+
+    // Klick → /app/account, Button wird active
+    await accountBtn.click()
+    await expect(page).toHaveURL(/\/app\/account/, { timeout: 8000 })
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 8000 })
+    await expect(accountBtn).toHaveClass(/\bactive\b/)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 3: Konto-Seite über Mobile Mehr-Menü erreichbar
   // --------------------------------------------------------------------------
 
   test('ACCOUNT: Konto-Seite ist über Mobile Mehr-Menü erreichbar', async ({ page }, testInfo) => {
@@ -67,7 +102,7 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 3: Profilfelder werden angezeigt
+  // TEST 4: Profilfelder werden angezeigt
   // --------------------------------------------------------------------------
 
   test('ACCOUNT: Profilfelder werden angezeigt und Rolle ist read-only', async ({ page }, testInfo) => {
@@ -100,7 +135,7 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 4: Profil speichern persistiert Felder + Begrüßung übernimmt Namen
+  // TEST 5: Profil speichern persistiert Felder + Begrüßung übernimmt Namen
   // --------------------------------------------------------------------------
 
   test('ACCOUNT: Profil speichern persistiert Felder und aktualisiert Begrüßung', async ({ page }, testInfo) => {
@@ -143,7 +178,7 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 5: is_admin bleibt unverändert nach Profil-Update
+  // TEST 6: is_admin bleibt unverändert nach Profil-Update
   // --------------------------------------------------------------------------
 
   test('ACCOUNT: is_admin wird durch den Profil-Update nicht verändert', async ({ page }, testInfo) => {
@@ -183,7 +218,7 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 6: Logout auf Konto-Seite leitet zu /login weiter
+  // TEST 7: Logout auf Konto-Seite leitet zu /login weiter
   // --------------------------------------------------------------------------
 
   test('ACCOUNT: Logout-Button auf Konto-Seite leitet zu /login weiter', async ({ page }, testInfo) => {
@@ -201,7 +236,7 @@ test.describe.serial('MarketOS Account', () => {
   })
 
   // --------------------------------------------------------------------------
-  // TEST 7: Mobile – kein Horizontal-Overflow auf Account-Seite
+  // TEST 8: Mobile – kein Horizontal-Overflow auf Account-Seite
   // --------------------------------------------------------------------------
 
   test('ACCOUNT MOBILE: Kein horizontaler Overflow auf der Konto-Seite', async ({ page }, testInfo) => {
