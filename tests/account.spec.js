@@ -20,6 +20,13 @@
  * 16. E-Mail-Validierung: ungültiges Format
  * 17. E-Mail-Validierung: identisch mit aktueller E-Mail
  * 18. E-Mail-Erfolgspfad (Auth-PUT gemockt – kein echter E-Mail-Change)
+ * 19. Rollen-Erweiterungsabschnitt vorhanden, organizer sieht Button 'Auch als Aussteller nutzen'
+ * 20. Cancel-Flow – Bestätigungsdiv öffnen und schließen ohne Aktion
+ * 21. Erfolgspfad organizer → both (PATCH gemockt) – Toast, Rollentext, Switcher sichtbar
+ * 22. Aussteller sieht Button 'Auch als Veranstalter nutzen' (GET gemockt)
+ * 23. role='both' sieht keinen Erweiterungsbutton, aber Info-Text (GET gemockt)
+ * 24. role='visitor' wird von /app/account zu /app umgeleitet (Besucher hat keinen Account-Bereich)
+ * 25. Mobile: Rollen-Erweiterungsabschnitt sichtbar, kein Horizontal-Overflow
  */
 
 import { test, expect } from '@playwright/test'
@@ -595,5 +602,313 @@ test.describe.serial('MarketOS Account', () => {
     await expect(page.getByTestId('account-logout-button')).toBeVisible()
 
     await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 19: Rollen-Erweiterungsabschnitt vorhanden – organizer sieht Button
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: Abschnitt vorhanden, organizer sieht Button „Auch als Aussteller nutzen"', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Abschnitt selbst immer sichtbar
+    await expect(page.getByTestId('account-role-expand-section')).toBeVisible()
+
+    // Info-Text mit Hinweis auf Aussteller-Ansicht
+    await expect(page.getByTestId('account-role-expand-info')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-info')).toContainText(/Aussteller-Ansicht/i)
+
+    // Erweiterungs-Button korrekt beschriftet
+    await expect(page.getByTestId('account-role-expand-button')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-button')).toContainText('Auch als Aussteller nutzen')
+
+    // Bestätigungs-Div noch nicht sichtbar
+    await expect(page.getByTestId('account-role-expand-confirm')).toHaveCount(0)
+    await expect(page.getByTestId('account-role-expand-cancel')).toHaveCount(0)
+
+    // Kein Fehler-Element im Ausgangszustand
+    await expect(page.getByTestId('account-role-expand-error')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 20: Cancel-Flow – Bestätigungsdiv öffnen und abbrechen
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: Cancel-Flow öffnet Bestätigungsdiv und bricht korrekt ab', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Erweiterungs-Button klicken → Bestätigungs-Panel erscheint
+    await page.getByTestId('account-role-expand-button').click()
+
+    await expect(page.getByTestId('account-role-expand-confirm')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-cancel')).toBeVisible()
+    // Erweiterungs-Button selbst verschwindet während des Confirm-Flows
+    await expect(page.getByTestId('account-role-expand-button')).toHaveCount(0)
+
+    // Abbrechen → Ursprungszustand wiederhergestellt
+    await page.getByTestId('account-role-expand-cancel').click()
+
+    await expect(page.getByTestId('account-role-expand-button')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-confirm')).toHaveCount(0)
+    await expect(page.getByTestId('account-role-expand-cancel')).toHaveCount(0)
+
+    // Kein Toast (keine Aktion ausgelöst)
+    await expect(page.getByTestId('toast-message')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 21: Erfolgspfad organizer → both (PATCH gemockt)
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: Erfolgspfad setzt role=both, zeigt Toast und Rolle-Switcher (PATCH gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // PATCH /rest/v1/profiles abfangen – simuliert erfolgreiche Rollen-Erweiterung
+    // ohne echten DB-Schreibvorgang. Regex statt Glob (Query-Params wie ?id=eq.UUID
+    // würden Glob **/rest/v1/profiles nicht matchen).
+    await page.route(/\/rest\/v1\/profiles/, async route => {
+      if (route.request().method() === 'PATCH') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'mock-both-id',
+            role: 'both',
+            display_name: 'TestUser',
+            first_name: '',
+            last_name: '',
+            company_name: '',
+            is_admin: false,
+            created_at: '2024-01-01T00:00:00Z'
+          })
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    // Expand-Button klicken
+    await page.getByTestId('account-role-expand-button').click()
+    await expect(page.getByTestId('account-role-expand-confirm')).toBeVisible()
+
+    // Bestätigen
+    await page.getByTestId('account-role-expand-confirm').click()
+
+    // Erfolgs-Toast erscheint
+    await expect(page.getByTestId('toast-message')).toContainText(/Rolle erweitert/i, { timeout: 8000 })
+
+    // Rollenanzeige zeigt 'Veranstalter & Aussteller'
+    await expect(page.getByTestId('account-role')).toContainText('Veranstalter & Aussteller')
+
+    // Erweiterungs-Button verschwunden (role ist jetzt 'both')
+    await expect(page.getByTestId('account-role-expand-button')).toHaveCount(0)
+    await expect(page.getByTestId('account-role-expand-confirm')).toHaveCount(0)
+
+    // Rollen-Switcher erscheint (ProtectedAppShell erkennt role='both'):
+    // beide Buttons (role-view-organizer + role-view-exhibitor) werden gerendert;
+    // .first() umgeht den strict-mode-Fehler bei mehreren Treffern.
+    await expect(
+      page.getByTestId('role-view-organizer').or(page.getByTestId('role-view-exhibitor')).first()
+    ).toBeVisible({ timeout: 5000 })
+
+    // Profil-Bereich weiterhin stabil (Regression)
+    await expect(page.getByTestId('account-display-name')).toBeVisible()
+    await expect(page.getByTestId('account-logout-button')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 22: Aussteller sieht Button 'Auch als Veranstalter nutzen' (GET gemockt)
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: Aussteller sieht Button „Auch als Veranstalter nutzen" (GET gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+
+    // GET /rest/v1/profiles abfangen – Aussteller-Profil simulieren.
+    // page.goto löst einen echten Seitenneuladen aus; ProtectedAppShell liest
+    // das Profil beim Mount neu → der gemockte GET wird getroffen.
+    // Wichtig: maybeSingle() in postgrest-js v2 setzt KEIN Accept-Object-Header
+    // ("No Accept header override — we fetch as a list and enforce cardinality
+    // client-side") → die Antwort muss ein Array sein, kein einzelnes Objekt.
+    await page.route(/\/rest\/v1\/profiles/, async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{
+            id: '00000000-0000-0000-0000-000000000002',
+            role: 'exhibitor',
+            display_name: 'Test Aussteller',
+            first_name: '',
+            last_name: '',
+            company_name: '',
+            is_admin: false,
+            created_at: '2024-01-01T00:00:00Z'
+          }])
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Rollenanzeige: 'Aussteller'
+    await expect(page.getByTestId('account-role')).toContainText('Aussteller')
+
+    // Erweiterungs-Button korrekt für exhibitor beschriftet
+    await expect(page.getByTestId('account-role-expand-button')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-button')).toContainText('Auch als Veranstalter nutzen')
+
+    // Info-Text weist auf Veranstalter-Ansicht hin
+    await expect(page.getByTestId('account-role-expand-info')).toContainText(/Veranstalter-Ansicht/i)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 23: role='both' sieht keinen Erweiterungsbutton, aber Info-Text (GET gemockt)
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: role=both zeigt keinen Button, aber Info-Text (GET gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+
+    // maybeSingle() → Array-Antwort (siehe TEST 22 Kommentar)
+    await page.route(/\/rest\/v1\/profiles/, async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{
+            id: '00000000-0000-0000-0000-000000000003',
+            role: 'both',
+            display_name: 'Test Both',
+            first_name: '',
+            last_name: '',
+            company_name: '',
+            is_admin: false,
+            created_at: '2024-01-01T00:00:00Z'
+          }])
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Rollenanzeige: 'Veranstalter & Aussteller'
+    await expect(page.getByTestId('account-role')).toContainText('Veranstalter & Aussteller')
+
+    // Kein Erweiterungs-Button (role='both', bereits erweitert)
+    await expect(page.getByTestId('account-role-expand-button')).toHaveCount(0)
+
+    // Info-Text erklärt verfügbare Funktionen
+    await expect(page.getByTestId('account-role-expand-info')).toBeVisible()
+    await expect(page.getByTestId('account-role-expand-info')).toContainText(/Veranstalter- und Aussteller-Funktionen/i)
+
+    // Kein Downgrade-Button vorhanden (absichtlich nicht implementiert)
+    await expect(page.getByTestId('account-role-expand-section')).toBeVisible()
+    await expect(page.locator('[data-testid="account-role-expand-section"] button')).toHaveCount(0)
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 24: role='visitor' wird von /app/account zu /app umgeleitet
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG: role=visitor wird von /app/account zu /app umgeleitet (GET gemockt)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+
+    // maybeSingle() → Array-Antwort (siehe TEST 22 Kommentar).
+    // ProtectedAppShell leitet Besucher per useEffect von allen Routen außer
+    // /app (overview) und /app/notifications weg. Der account-Bereich ist für
+    // Besucher bewusst nicht zugänglich.
+    await page.route(/\/rest\/v1\/profiles/, async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{
+            id: '00000000-0000-0000-0000-000000000004',
+            role: 'visitor',
+            display_name: 'Test Besucher',
+            first_name: '',
+            last_name: '',
+            company_name: '',
+            is_admin: false,
+            created_at: '2024-01-01T00:00:00Z'
+          }])
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    await page.goto('/app/account')
+
+    // Besucher werden automatisch zu /app (overview) umgeleitet
+    await expect(page).toHaveURL(/\/app$/, { timeout: 10000 })
+
+    // AccountView wird nicht gerendert
+    await expect(page.getByTestId('account-view')).toHaveCount(0)
+
+    // App ist weiterhin geladen und authentifiziert
+    await expect(page.getByTestId('app-authenticated')).toBeVisible({ timeout: 5000 })
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 25: Mobile – Rollen-Erweiterungsabschnitt sichtbar, kein Overflow
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT ROLLEN-ERWEITERUNG MOBILE: Abschnitt sichtbar, kein horizontaler Overflow', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-chromium', 'Mobile-Test nur auf mobile-chromium.')
+
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Rollen-Erweiterungs-Abschnitt auf Mobile sichtbar
+    await expect(page.getByTestId('account-role-expand-section')).toBeVisible()
+
+    // Kein horizontaler Scroll (Abschnitt erzeugt keinen Overflow)
+    const hasHorizontalScroll = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+    )
+    expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile durch Rollen-Erweiterungs-Abschnitt erwartet').toBeFalsy()
   })
 })

@@ -7,6 +7,7 @@ const ROLE_LABELS = {
   organizer: 'Veranstalter',
   exhibitor: 'Aussteller',
   both: 'Veranstalter & Aussteller',
+  visitor: 'Besucher',
 }
 
 /**
@@ -17,17 +18,17 @@ const ROLE_LABELS = {
  *
  * Nicht editierbar (read-only oder verborgen):
  *   email  – kommt aus session.user.email (auth.users, nicht profiles)
- *   role   – nur anzeigen, kein Formularfeld
+ *   role   – read-only angezeigt; Self-Upgrade (organizer/exhibitor → both)
+ *            per Bestätigungsflow erlaubt; Downgrade wird nicht angeboten
  *   is_admin – nur anzeigen wenn true, kein Formularfeld
  *   id, created_at – nie im Payload
  *
- * Sicherheit: Das Update-Payload enthält bewusst KEINE Felder für
- *   role oder is_admin. Die bestehende RLS-Policy profiles_update_own
- *   erlaubt es einem User, sein eigenes Profil zu aktualisieren, enthält
- *   aber keinen Column-Level-Schutz für is_admin. Daher wird is_admin
- *   hier strikt aus dem Payload ausgeschlossen (kein Exploit-Risiko
- *   durch diese View, aber das grundlegende DB-Risiko bleibt bekannt –
- *   Fix folgt separat als DB-Migration mit BEFORE UPDATE Trigger).
+ * Sicherheit: Das Profil-Update-Payload (handleSave) enthält KEINE Felder
+ *   für role oder is_admin. Der Rollen-Erweiterungs-Handler (handleConfirmExpand)
+ *   sendet bewusst nur { role: 'both' } – kein is_admin, kein Downgrade.
+ *   is_admin ist durch einen BEFORE UPDATE Trigger geschützt.
+ *   role hat keinen Trigger-Schutz – Self-Upgrade auf 'both' ist für Beta
+ *   bewusst erlaubt (fachliches Risiko überschaubar, kein Admin-Zugriff).
  */
 const MIN_PASSWORD_LENGTH = 6
 
@@ -49,6 +50,11 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
   const [emailForm, setEmailForm] = useState({ newEmail: '' })
   const [emailError, setEmailError] = useState('')
   const [savingEmail, setSavingEmail] = useState(false)
+
+  // Rollen-Erweiterung
+  const [confirmExpand, setConfirmExpand] = useState(false)
+  const [expandingRole, setExpandingRole] = useState(false)
+  const [expandError, setExpandError] = useState('')
 
   const handlePwChange = useCallback(e => {
     const { name, value } = e.target
@@ -128,9 +134,47 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
     }
   }, [emailForm.newEmail, notify, session])
 
+  const handleExpandRoleClick = useCallback(() => {
+    setConfirmExpand(true)
+    setExpandError('')
+  }, [])
+
+  const handleCancelExpand = useCallback(() => {
+    setConfirmExpand(false)
+    setExpandError('')
+  }, [])
+
+  const handleConfirmExpand = useCallback(async () => {
+    if (!profile?.id || expandingRole) return
+    // Nur organizer → both und exhibitor → both erlaubt
+    if (profile.role !== 'organizer' && profile.role !== 'exhibitor') return
+
+    setExpandingRole(true)
+    setExpandError('')
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ role: 'both' })
+        .eq('id', profile.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setConfirmExpand(false)
+      onProfileUpdated?.(data)
+      notify('success', 'Rolle erweitert. Du kannst jetzt beide Ansichten nutzen.')
+    } catch (err) {
+      setExpandError(getUserErrorMessage(err, 'Rolle konnte nicht erweitert werden.'))
+    } finally {
+      setExpandingRole(false)
+    }
+  }, [expandingRole, notify, onProfileUpdated, profile])
+
   // Formular mit Profildaten befüllen wenn sich profile ändert
   useEffect(() => {
     if (!profile) return
+    setConfirmExpand(false) // Bestätigungs-State bei Profilwechsel zurücksetzen
     setForm({
       display_name: profile.display_name || '',
       first_name: profile.first_name || '',
@@ -180,6 +224,15 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
   const email = session?.user?.email || '–'
   const roleLabel = ROLE_LABELS[profile?.role] ?? profile?.role ?? '–'
   const isAdmin = profile?.is_admin === true
+
+  // Rollen-Erweiterung: erlaubt für organizer und exhibitor (nicht both, nicht visitor)
+  const canExpandRole = profile?.role === 'organizer' || profile?.role === 'exhibitor'
+  const expandButtonLabel = profile?.role === 'organizer'
+    ? 'Auch als Aussteller nutzen'
+    : 'Auch als Veranstalter nutzen'
+  const expandInfoText = profile?.role === 'organizer'
+    ? 'Du kannst zusätzlich die Aussteller-Ansicht aktivieren.'
+    : 'Du kannst zusätzlich die Veranstalter-Ansicht aktivieren.'
 
   return (
     <div className="view-section" data-testid="account-view">
@@ -268,7 +321,67 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
         <div className="field">
           <label>Rolle</label>
           <p data-testid="account-role">{roleLabel}</p>
-          <small className="muted">Rollen-Erweiterung folgt in einer späteren Version.</small>
+        </div>
+
+        <div data-testid="account-role-expand-section">
+          {profile?.role === 'both' && (
+            <p className="small muted" data-testid="account-role-expand-info">
+              Du kannst Veranstalter- und Aussteller-Funktionen nutzen.
+            </p>
+          )}
+          {profile?.role === 'visitor' && (
+            <p className="small muted" data-testid="account-role-expand-info">
+              Diese Rolle unterstützt die Rollen-Erweiterung aktuell nicht.
+            </p>
+          )}
+          {canExpandRole && !confirmExpand && (
+            <div style={{ marginTop: '4px' }}>
+              <p className="small muted" style={{ marginBottom: '8px' }} data-testid="account-role-expand-info">
+                {expandInfoText}{' '}
+                Diese Erweiterung kann aktuell nicht selbst rückgängig gemacht werden.
+              </p>
+              <button
+                className="btn ghost"
+                type="button"
+                data-testid="account-role-expand-button"
+                onClick={handleExpandRoleClick}
+              >
+                {expandButtonLabel}
+              </button>
+            </div>
+          )}
+          {canExpandRole && confirmExpand && (
+            <div style={{ marginTop: '4px' }}>
+              <p className="small" style={{ marginBottom: '10px' }}>
+                Bist du sicher? Diese Erweiterung kann aktuell nicht selbst rückgängig gemacht werden.
+              </p>
+              {expandError && (
+                <p className="error small" data-testid="account-role-expand-error" style={{ marginBottom: '8px' }}>
+                  {expandError}
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  data-testid="account-role-expand-cancel"
+                  onClick={handleCancelExpand}
+                  disabled={expandingRole}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  data-testid="account-role-expand-confirm"
+                  onClick={handleConfirmExpand}
+                  disabled={expandingRole}
+                >
+                  {expandingRole ? 'Wird gespeichert...' : 'Ja, jetzt erweitern'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {isAdmin && (
