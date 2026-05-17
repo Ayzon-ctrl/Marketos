@@ -14,7 +14,7 @@ const ROLE_LABELS = {
  * Konto-Seite (/app/account)
  *
  * Erlaubt das Bearbeiten von:
- *   display_name, first_name, last_name, company_name
+ *   display_name, first_name, last_name, company_name, phone
  *
  * Nicht editierbar (read-only oder verborgen):
  *   email  – kommt aus session.user.email (auth.users, nicht profiles)
@@ -38,6 +38,7 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
     first_name: '',
     last_name: '',
     company_name: '',
+    phone: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -180,6 +181,7 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
       first_name: profile.first_name || '',
       last_name: profile.last_name || '',
       company_name: profile.company_name || '',
+      phone: profile.phone || '',
     })
   }, [profile])
 
@@ -201,6 +203,7 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         company_name: form.company_name.trim(),
+        phone: form.phone.trim() || null,
       }
 
       const { data, error } = await supabase
@@ -293,6 +296,23 @@ export default function AccountView({ profile, session, notify, onProfileUpdated
               value={form.company_name}
               onChange={handleChange}
             />
+          </div>
+
+          <div className="field">
+            <label htmlFor="account-phone">Telefonnummer</label>
+            <input
+              id="account-phone"
+              name="phone"
+              className="input"
+              data-testid="account-phone"
+              type="tel"
+              placeholder="z. B. +49 170 1234567"
+              autoComplete="tel"
+              maxLength={30}
+              value={form.phone}
+              onChange={handleChange}
+            />
+            <small className="muted">Optional. Wird nur intern verwendet und nicht öffentlich angezeigt.</small>
           </div>
 
           <button

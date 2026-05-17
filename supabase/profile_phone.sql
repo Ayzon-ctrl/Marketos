@@ -1,0 +1,55 @@
+-- =============================================================================
+-- Migration: UX2.8.3 – Telefonnummer im Nutzerprofil
+-- =============================================================================
+--
+-- Zweck:
+--   Erweitert die profiles-Tabelle um das optionale Feld `phone` (text).
+--   Nutzer können im Konto-Bereich (/app/account) eine Telefonnummer
+--   hinterlegen.
+--
+-- Eigenschaften:
+--   - Optionales Freitext-Feld (kein NOT NULL, kein UNIQUE, kein CHECK)
+--   - Bestehende Zeilen erhalten NULL – kein Datenverlust, keine Downtime
+--   - Keine öffentliche Anzeige (nicht in Public-Queries exponiert)
+--   - Keine Policy-Änderung nötig: profiles_update_own erlaubt bereits
+--     alle Spalten der eigenen Zeile zu schreiben
+--   - Trigger protect_profile_admin_fields schützt weiterhin nur is_admin;
+--     phone ist davon unberührt
+--   - loadDashboardData nutzt select('*') – phone wird automatisch
+--     mitgeladen ohne Code-Änderung in dashboardData.js
+--
+-- Idempotenz:
+--   `add column if not exists` – sicher mehrfach ausführbar
+--
+-- =============================================================================
+
+alter table public.profiles
+  add column if not exists phone text;
+
+-- =============================================================================
+-- Prüf-Query (nach Ausführung ausführen):
+--   Prüft, ob die Spalte erfolgreich angelegt wurde.
+--
+-- select column_name, data_type, is_nullable
+-- from   information_schema.columns
+-- where  table_schema = 'public'
+--   and  table_name   = 'profiles'
+--   and  column_name  = 'phone';
+--
+-- Erwartetes Ergebnis:
+--   column_name | data_type | is_nullable
+--   ------------+-----------+------------
+--   phone       | text      | YES
+--
+-- =============================================================================
+
+-- =============================================================================
+-- Rollback (nur bei Bedarf – nicht automatisch ausführen):
+--
+-- alter table public.profiles
+--   drop column if exists phone;
+--
+-- Hinweis: Löscht alle gespeicherten Telefonnummern unwiderruflich.
+--          Nur ausführen wenn die Migration vollständig rückgängig gemacht
+--          werden soll und keine Nutzer die Spalte bereits befüllt haben.
+-- =============================================================================

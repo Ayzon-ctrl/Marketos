@@ -27,6 +27,10 @@
  * 23. role='both' sieht keinen Erweiterungsbutton, aber Info-Text (GET gemockt)
  * 24. role='visitor' wird von /app/account zu /app umgeleitet (Besucher hat keinen Account-Bereich)
  * 25. Mobile: Rollen-Erweiterungsabschnitt sichtbar, kein Horizontal-Overflow
+ * 26. Telefonnummer-Feld vorhanden, type="tel", optional
+ * 27. Telefonnummer speichern persistiert – inkl. Trim
+ * 28. Telefonnummer löschen (leer speichern) möglich
+ * 29. Mobile: Konto-Seite mit Telefonnummer-Feld kein Horizontal-Overflow
  */
 
 import { test, expect } from '@playwright/test'
@@ -910,5 +914,126 @@ test.describe.serial('MarketOS Account', () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth
     )
     expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile durch Rollen-Erweiterungs-Abschnitt erwartet').toBeFalsy()
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 26: Telefonnummer-Feld vorhanden, type="tel", optional
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT TELEFON: Feld vorhanden, type="tel", kein Pflichtfeld', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Feld vorhanden und korrekt konfiguriert
+    const phoneInput = page.getByTestId('account-phone')
+    await expect(phoneInput).toBeVisible()
+    await expect(phoneInput).toHaveAttribute('type', 'tel')
+    await expect(phoneInput).not.toHaveAttribute('required')
+    await expect(phoneInput).toHaveAttribute('maxlength', '30')
+    await expect(phoneInput).toHaveAttribute('autocomplete', 'tel')
+
+    // Hinweistext sichtbar
+    await expect(page.getByTestId('account-profile-section')).toContainText('Optional. Wird nur intern verwendet')
+
+    // Profil-Speichern ohne Phone-Eingabe funktioniert (kein required-Fehler)
+    await page.getByTestId('account-save').click()
+    await expect(page.getByTestId('toast-message')).toContainText(/Profil gespeichert/i, { timeout: 8000 })
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 27: Telefonnummer speichern persistiert – inkl. Trim
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT TELEFON: Telefonnummer speichern persistiert nach Reload und wird getrimmt', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Telefonnummer mit Leerzeichen vorne/hinten (Trim-Test)
+    const rawPhone = '  +49 170 1234567  '
+    const trimmedPhone = '+49 170 1234567'
+
+    await page.getByTestId('account-phone').fill(rawPhone)
+    await page.getByTestId('account-save').click()
+    await expect(page.getByTestId('toast-message')).toContainText(/Profil gespeichert/i, { timeout: 8000 })
+
+    // Nach Reload: Wert bleibt erhalten (getrimmt)
+    await page.reload()
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('account-phone')).toHaveValue(trimmedPhone)
+
+    // Andere Felder weiterhin stabil (Regression)
+    await expect(page.getByTestId('account-display-name')).toBeVisible()
+    await expect(page.getByTestId('account-save')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 28: Telefonnummer löschen (leer speichern) möglich
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT TELEFON: Telefonnummer löschen (leer speichern) möglich', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-chromium', 'Desktop-Test.')
+
+    const errors = attachConsoleTracking(page)
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Erst eine Nummer setzen
+    await page.getByTestId('account-phone').fill('+49 89 123456')
+    await page.getByTestId('account-save').click()
+    await expect(page.getByTestId('toast-message')).toContainText(/Profil gespeichert/i, { timeout: 8000 })
+
+    // Warten bis Toast vom ersten Save verschwindet – sonst matcht der zweite
+    // toast-Check den ersten Toast statt den vom zweiten Save-Aufruf.
+    await page.getByTestId('toast-message').waitFor({ state: 'hidden', timeout: 10000 })
+
+    // Telefonnummer leeren und erneut speichern
+    await page.getByTestId('account-phone').fill('')
+    await page.getByTestId('account-save').click()
+    await expect(page.getByTestId('toast-message')).toContainText(/Profil gespeichert/i, { timeout: 8000 })
+
+    // Nach Reload: Feld leer (NULL → '')
+    await page.reload()
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('account-phone')).toHaveValue('')
+
+    // Kein Fehler aufgetreten
+    await expect(page.getByTestId('account-phone')).toBeVisible()
+
+    await expectNoConsoleErrors(errors)
+  })
+
+  // --------------------------------------------------------------------------
+  // TEST 29: Mobile – Telefonnummer-Feld kein horizontaler Overflow
+  // --------------------------------------------------------------------------
+
+  test('ACCOUNT TELEFON MOBILE: Telefonnummer-Feld erzeugt keinen horizontalen Overflow', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-chromium', 'Mobile-Test nur auf mobile-chromium.')
+
+    await ensureAuthenticated(page, testInfo.project.name, { skipStyleGuide: true })
+    await page.goto('/app/account')
+    await expect(page.getByTestId('account-view')).toBeVisible({ timeout: 15000 })
+
+    // Telefonnummer-Feld auf Mobile sichtbar
+    await expect(page.getByTestId('account-phone')).toBeVisible()
+
+    // Kein horizontaler Scroll
+    const hasHorizontalScroll = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+    )
+    expect(hasHorizontalScroll, 'Kein horizontaler Scroll auf Mobile durch Telefonnummer-Feld erwartet').toBeFalsy()
   })
 })
